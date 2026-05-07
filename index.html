@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es" class="h-full bg-white dark:bg-gray-900">
+  <head>
+    <script>
+      (function () {
+        try {
+          var k = 'wowed-color-mode'
+          var v = localStorage.getItem(k)
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          var useDark = v === 'dark' || ((v === 'system' || !v) && prefersDark)
+          if (v === 'light') useDark = false
+          document.documentElement.classList.toggle('dark', useDark)
+        } catch (e) {}
+      })()
+    </script>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WowEd</title>
+  </head>
+  <body class="h-full">
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
