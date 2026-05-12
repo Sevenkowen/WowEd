@@ -12,7 +12,7 @@ import {
   TransitionRoot,
 } from '@headlessui/vue'
 import { Bars3Icon, BellIcon, XMarkIcon } from '@heroicons/vue/24/outline'
-import { ChevronDownIcon, MagnifyingGlassIcon } from '@heroicons/vue/20/solid'
+import { ChevronDownIcon } from '@heroicons/vue/20/solid'
 import SidebarNavigation from '@/components/SidebarNavigation.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 
@@ -140,19 +140,7 @@ const userNavigation = [
 
         <div class="h-6 w-px bg-gray-200 lg:hidden dark:bg-white/10" aria-hidden="true"></div>
 
-        <div class="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-          <form class="grid flex-1 grid-cols-1" action="#" method="GET">
-            <input
-              name="search"
-              aria-label="Buscar"
-              class="col-start-1 row-start-1 block size-full bg-white pl-8 text-base text-gray-900 outline-hidden placeholder:text-gray-400 sm:text-sm/6 dark:bg-gray-900 dark:text-white dark:placeholder:text-gray-500"
-              placeholder="Buscar…"
-            />
-            <MagnifyingGlassIcon
-              class="pointer-events-none col-start-1 row-start-1 size-5 self-center text-gray-400"
-              aria-hidden="true"
-            />
-          </form>
+        <div class="flex flex-1 items-center justify-end gap-x-4 self-stretch lg:gap-x-6">
           <div class="flex items-center gap-x-4 lg:gap-x-6">
             <button type="button" class="-m-2.5 p-2.5 text-gray-400 hover:text-gray-500 dark:hover:text-white">
               <span class="sr-only">Notificaciones</span>

@@ -27,7 +27,6 @@ import {
   ScaleIcon,
   SignalIcon,
   SparklesIcon,
-  Squares2X2Icon,
   UserCircleIcon,
   UserGroupIcon,
   UserIcon,
@@ -44,7 +43,7 @@ const route = useRoute()
 
 const primaryLinks: NavLink[] = [
   { name: 'Dashboard', to: '/', icon: HomeIcon },
-  { name: 'Centro de Gestión', to: '/centro-gestion-institucional', icon: Squares2X2Icon },
+  // { name: 'Centro de Gestión', to: '/centro-gestion-institucional', icon: Squares2X2Icon },
   { name: 'Planificación', to: '/planificador-anual', icon: CalendarDaysIcon },
   { name: 'Agenda', to: '/planificador-semanal', icon: CalendarIcon },
 ]

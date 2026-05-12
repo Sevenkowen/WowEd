@@ -24,7 +24,7 @@ const mainChildren: RouteRecordRaw[] = [
   {
     path: 'planificador-semanal',
     name: 'planificador-semanal',
-    component: () => import('@/pages/PlaceholderPage.vue'),
+    component: () => import('@/pages/PlanificadorSemanalPage.vue'),
     meta: { title: 'Agenda' },
   },
   {
@@ -66,7 +66,7 @@ const mainChildren: RouteRecordRaw[] = [
   {
     path: 'equipo-directivo',
     name: 'equipo-directivo',
-    component: () => import('@/pages/PlaceholderPage.vue'),
+    component: () => import('@/pages/EquipoDirectivoPage.vue'),
     meta: { title: 'Equipo Directivo' },
   },
   {

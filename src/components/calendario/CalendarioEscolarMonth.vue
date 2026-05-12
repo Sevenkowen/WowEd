@@ -15,6 +15,10 @@ defineOptions({ name: 'CalendarioEscolarMonth' })
 const schoolYear = defineModel<number>('schoolYear', { default: 2026 })
 const selectedDate = defineModel<string | null>('selectedDate', { default: null })
 
+const emit = defineEmits<{
+  (e: 'create-event', payload: { date: string | null }): void
+}>()
+
 interface DayCell {
   date: string
   isCurrentMonth?: boolean
@@ -231,6 +235,7 @@ const weekDays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'] as const
             <button
               type="button"
               class="rounded-md bg-indigo-500 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-400"
+              @click="emit('create-event', { date: selectedDate })"
             >
               Agregar evento
             </button>
@@ -262,6 +267,7 @@ const weekDays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'] as const
                         active ? 'bg-gray-100 text-gray-900 dark:bg-white/5 dark:text-white' : 'text-gray-700 dark:text-gray-300',
                         'block px-4 py-2 text-sm',
                       ]"
+                      @click.prevent="emit('create-event', { date: selectedDate })"
                       >Crear evento</a
                     >
                   </MenuItem>

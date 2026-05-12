@@ -108,7 +108,7 @@ function tagClasses(tone: TagTone): string {
     </div>
 
     <div
-      class="mt-12 grid w-full grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_min(100%,19rem)] lg:items-start lg:gap-8 xl:min-h-[28rem] xl:gap-9 xl:[grid-template-columns:minmax(0,1fr)_20.5rem] 2xl:[grid-template-columns:minmax(0,1fr)_21.5rem]"
+      class="mt-12 grid w-full grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_min(100%,19rem)] xl:items-start xl:gap-9 xl:min-h-[28rem] 2xl:[grid-template-columns:minmax(0,1fr)_21.5rem]"
     >
       <!-- Área principal del dashboard (izquierda) -->
       <section
