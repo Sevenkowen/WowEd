@@ -1,10 +1,19 @@
-# Build Vue — el contexto de docker compose es la raíz del repo (.)
-FROM node:22-alpine AS build
+# Build Vue — contexto docker compose = raíz del repo (.)
+# NO usar node:*-alpine: Vite 8 / Rolldown necesita glibc (@rolldown/binding-linux-x64-gnu)
+FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+
+# Un solo RUN: evita caché de capas con node_modules de otra imagen base (Alpine/musl)
+RUN npm ci --include=optional \
+    && npm install @rolldown/binding-linux-x64-gnu@1.0.0-rc.17 --no-save \
+    && node -e "require('@rolldown/binding-linux-x64-gnu')"
 
 COPY frontend/index.html frontend/vite.config.ts \
      frontend/tsconfig.json frontend/tsconfig.app.json frontend/tsconfig.node.json ./

@@ -25,9 +25,20 @@ ssh usuario@TU_VPS
 sudo mkdir -p /opt/wowed
 sudo chown $USER:$USER /opt/wowed
 cd /opt/wowed
-git clone TU_REPO_URL .
+git clone https://github.com/Sevenkowen/WowEd.git .
 # Estructura esperada: frontend/, backend/, deploy/, docker-compose.yml
 ```
+
+Si el remoto quedó mal (ej. `TU_USUARIO/TU_REPO`):
+
+```bash
+cd /opt/wowed
+git remote set-url origin https://github.com/Sevenkowen/WowEd.git
+git remote -v
+git pull origin main
+```
+
+GitHub **no acepta la contraseña de la cuenta** en `git pull`. Usá un [Personal Access Token](https://github.com/settings/tokens) (scope `repo`) como contraseña, o configurá SSH (`git@github.com:Sevenkowen/WowEd.git`).
 
 ## 2. Variables de entorno
 
@@ -126,6 +137,7 @@ Si `pg_hba.conf` no permite la red Docker, podés añadir una línea para la sub
 | Front carga pero calendario vacío | `.env` del build usa `VITE_USE_API=true`; revisar Network en el navegador |
 | CORS en consola | `CORS_ORIGINS` debe incluir la URL exacta del sitio |
 | Puerto 80 ocupado | En `.env` poné `HTTP_PORT=8080` y usá proxy o abrí 8080 |
+| Build web: `binding-linux-x64-musl` | El `frontend/Dockerfile` debe usar `node:22-bookworm-slim` (no Alpine). Rebuild sin caché: `docker-compose build --no-cache web` |
 
 ## 9. Seguridad
 
