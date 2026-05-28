@@ -1,5 +1,46 @@
-# Vue 3 + TypeScript + Vite
+# WowEd
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Plataforma educativa: calendario escolar, planificación y gestión institucional.
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+## Estructura del repositorio
+
+```text
+WowEd/
+├── frontend/     # Vue 3 + Vite + TypeScript
+├── backend/      # API FastAPI + PostgreSQL
+├── deploy/       # Docker, nginx, guía de despliegue
+└── docker-compose.yml
+```
+
+## Desarrollo local
+
+### API
+
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate          # Windows
+pip install -r requirements.txt
+copy .env.example .env          # DATABASE_URL, SECRET_KEY
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+copy .env.example .env          # VITE_API_URL, VITE_USE_API
+npm run dev
+```
+
+App: http://localhost:5173 — API: http://127.0.0.1:8000/docs
+
+## Producción (Docker)
+
+Ver [deploy/DEPLOY.md](deploy/DEPLOY.md).
+
+```bash
+cp deploy/.env.example .env
+docker compose up -d --build
+```
