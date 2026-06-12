@@ -1,5 +1,5 @@
 import { onBeforeUnmount, ref, type Ref } from 'vue'
-import { isDateBeforeToday } from '@/utils/calendarioDates'
+import { isCalendarSlotCreateAllowed } from '@/utils/calendarioDates'
 import { formatTimeLabel } from '@/utils/calendarioEventTime'
 
 export type CalendarioDragKind = 'event' | 'task'
@@ -132,7 +132,7 @@ export function useCalendarioGridDrag(config: CalendarioGridDragConfig) {
     const item = dragging.value ?? pending
     const target = hover.value
 
-    if (dragging.value && item && target && !isDateBeforeToday(target.date)) {
+    if (dragging.value && item && target && isCalendarSlotCreateAllowed(target.date, target.startTime)) {
       config.onDrop(item, target.date, target.startTime)
       justDragged.value = true
       window.setTimeout(() => {
@@ -183,7 +183,7 @@ export function useCalendarioGridDrag(config: CalendarioGridDragConfig) {
       !!dragging.value &&
       !!hover.value &&
       !isAtDragOrigin() &&
-      !isDateBeforeToday(hover.value.date)
+      isCalendarSlotCreateAllowed(hover.value.date, hover.value.startTime)
     )
   }
 

@@ -112,9 +112,26 @@ export async function apiResizeTask(id: string, endTime: string): Promise<CalTas
   })
 }
 
-export async function apiPatchTask(id: string, patch: { completed?: boolean }): Promise<CalTask> {
+export interface PatchTaskPayload {
+  completed?: boolean
+  cuadrante?: string
+  title?: string
+  description?: string
+  date?: string
+  tipo?: string
+  time?: string | null
+  end_time?: string | null
+  all_day?: boolean
+  event_id?: string | null
+}
+
+export async function apiPatchTask(id: string, patch: PatchTaskPayload): Promise<CalTask> {
   return apiFetch<CalTask>(`/calendar/tasks/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(patch),
   })
+}
+
+export async function apiDeleteTask(id: string): Promise<void> {
+  await apiFetch<void>(`/calendar/tasks/${id}`, { method: 'DELETE' })
 }

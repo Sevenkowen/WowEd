@@ -7,7 +7,11 @@ import {
   fetchEventsPorFecha,
   type CreateEventPayload,
 } from '@/api/calendarioApi'
-import { isCalendarModifyAllowed, isDateBeforeToday } from '@/utils/calendarioDates'
+import {
+  isCalendarModifyAllowed,
+  isCalendarSlotCreateAllowed,
+  isDateBeforeToday,
+} from '@/utils/calendarioDates'
 import type { CalRecurrencePreset } from '@/utils/calendarioRecurrence'
 import { expandRecurrenceDates } from '@/utils/calendarioRecurrence'
 import type { NuevoCalendarioEvento } from '@/composables/useCalendarioEscolarEvents'
@@ -44,7 +48,14 @@ export function useCalendarioEscolarEventsApi() {
   }
 
   async function addEvent(input: NuevoCalendarioEvento): Promise<CalEvent | null> {
-    if (isDateBeforeToday(input.date)) return null
+    if (
+      !isCalendarSlotCreateAllowed(
+        input.date,
+        input.allDay ? null : input.startTime,
+      )
+    ) {
+      return null
+    }
     const payload: CreateEventPayload = {
       date: input.date,
       title: input.title,
@@ -83,7 +94,7 @@ export function useCalendarioEscolarEventsApi() {
 
   async function moveEvent(eventId: string, newDate: string, newStartTime: string): Promise<boolean> {
     const from = findEventDate(apiPorFecha.value, eventId)
-    if (!from || !isCalendarModifyAllowed(from, newDate)) return false
+    if (!from || !isCalendarModifyAllowed(from, newDate, newStartTime)) return false
     await apiMoveEvent(eventId, newDate, newStartTime)
     await loadAll()
     return true

@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
 import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
-import { formatYmd, mondayIndex, parseYmd } from '@/utils/calendarioDates'
+import { formatYmd, isDateBeforeToday, mondayIndex, parseYmd } from '@/utils/calendarioDates'
 import type { CalendarioContentMode, CalendarioDisplayView } from '@/utils/calendarioDates'
 import { gcalShell } from '@/utils/calendarioGoogleTheme'
 import CalendarioEscolarNavToolbar from '@/components/calendario/CalendarioEscolarNavToolbar.vue'
@@ -44,6 +44,7 @@ interface YearDay {
   isCurrentMonth?: boolean
   isToday?: boolean
   isSelected?: boolean
+  isPast?: boolean
   hasEvents: boolean
 }
 
@@ -68,6 +69,7 @@ function buildMonth(y: number, m: number): YearDay[] {
       isCurrentMonth,
       isToday: dateStr === todayStr,
       isSelected: selectedDate.value === dateStr,
+      isPast: isDateBeforeToday(dateStr),
       hasEvents:
         contentMode.value === 'tareas'
           ? (tareasPorFecha.value[dateStr]?.length ?? 0) > 0
@@ -130,7 +132,7 @@ function selectDay(date: string) {
       @refresh="$emit('refresh')"
     />
 
-    <div class="min-h-0 flex-1 overflow-auto bg-white dark:bg-[#202124]">
+    <div class="min-h-0 flex-1 overflow-auto bg-gray-50 dark:bg-gray-800">
       <div
         class="mx-auto grid max-w-3xl grid-cols-1 gap-x-8 gap-y-12 px-4 py-10 sm:grid-cols-2 sm:px-6 xl:max-w-none xl:grid-cols-3 xl:px-8 2xl:grid-cols-4"
       >
@@ -149,16 +151,17 @@ function selectDay(date: string) {
               :data-is-current-month="day.isCurrentMonth ? '' : undefined"
               :data-is-selected="day.isSelected ? '' : undefined"
               :data-is-today="day.isToday ? '' : undefined"
-              class="relative py-1.5 not-data-is-current-month:bg-gray-100 not-data-is-selected:not-data-is-current-month:not-data-is-today:text-gray-400 first:rounded-tl-lg last:rounded-br-lg hover:bg-gray-50 focus:z-10 data-is-current-month:bg-white not-data-is-selected:data-is-current-month:not-data-is-today:text-gray-900 data-is-current-month:hover:bg-gray-50/80 data-is-selected:font-semibold data-is-selected:text-white data-is-today:font-semibold data-is-today:not-data-is-selected:text-indigo-600 nth-36:rounded-bl-lg nth-7:rounded-tr-lg dark:not-data-is-current-month:bg-gray-900/75 dark:not-data-is-selected:not-data-is-current-month:not-data-is-today:text-gray-500 dark:data-is-current-month:bg-gray-950 dark:not-data-is-selected:data-is-current-month:not-data-is-today:text-white dark:data-is-current-month:hover:bg-gray-900/50 dark:data-is-today:not-data-is-selected:text-indigo-400"
+              :data-is-past="day.isPast ? '' : undefined"
+              class="relative py-1.5 not-data-is-current-month:bg-gray-100 data-is-past:opacity-45 data-is-past:not-data-is-selected:saturate-50 not-data-is-selected:not-data-is-current-month:not-data-is-today:text-gray-400 first:rounded-tl-lg last:rounded-br-lg hover:bg-gray-50 focus:z-10 data-is-current-month:bg-white not-data-is-selected:data-is-current-month:not-data-is-today:text-gray-900 data-is-current-month:hover:bg-gray-50/80 data-is-selected:font-semibold data-is-selected:text-white data-is-today:font-semibold data-is-today:not-data-is-selected:text-indigo-600 nth-36:rounded-bl-lg nth-7:rounded-tr-lg dark:not-data-is-current-month:bg-gray-900/75 dark:not-data-is-selected:not-data-is-current-month:not-data-is-today:text-gray-500 dark:data-is-current-month:bg-gray-950 dark:not-data-is-selected:data-is-current-month:not-data-is-today:text-white dark:data-is-current-month:hover:bg-gray-900/50 dark:data-is-today:not-data-is-selected:text-indigo-400"
               @click="selectDay(day.date)"
             >
               <time
                 :datetime="day.date"
-                class="mx-auto flex size-7 items-center justify-center rounded-full in-data-is-selected:not-in-data-is-today:bg-[#1a73e8] in-data-is-selected:in-data-is-today:bg-[#1a73e8] in-data-is-selected:text-white in-data-is-today:bg-[#1a73e8] in-data-is-today:font-medium in-data-is-today:text-white"
+                class="mx-auto flex size-7 items-center justify-center rounded-full in-data-is-selected:not-in-data-is-today:bg-indigo-600 in-data-is-selected:in-data-is-today:bg-indigo-600 in-data-is-selected:text-white in-data-is-today:bg-indigo-600 in-data-is-today:font-medium in-data-is-today:text-white dark:in-data-is-selected:not-in-data-is-today:bg-indigo-500 dark:in-data-is-selected:in-data-is-today:bg-indigo-500 dark:in-data-is-today:bg-indigo-500"
               >{{ dayNum(day.date) }}</time>
               <span
                 v-if="day.hasEvents && day.isCurrentMonth"
-                class="absolute bottom-1 left-1/2 size-1 -translate-x-1/2 rounded-full bg-[#1a73e8] dark:bg-[#8ab4f8]"
+                class="absolute bottom-1 left-1/2 size-1 -translate-x-1/2 rounded-full bg-indigo-600 dark:bg-indigo-400"
                 aria-hidden="true"
               />
             </button>

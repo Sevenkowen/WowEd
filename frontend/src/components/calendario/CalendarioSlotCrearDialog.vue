@@ -8,7 +8,12 @@ import {
   TransitionRoot,
 } from '@headlessui/vue'
 import { CalendarDaysIcon, CheckCircleIcon } from '@heroicons/vue/24/outline'
-import { CALENDAR_PAST_DATE_MESSAGE, isDateBeforeToday, parseYmd } from '@/utils/calendarioDates'
+import {
+  CALENDAR_PAST_DATE_MESSAGE,
+  CALENDAR_PAST_SLOT_MESSAGE,
+  isCalendarSlotCreateAllowed,
+  parseYmd,
+} from '@/utils/calendarioDates'
 
 defineOptions({ name: 'CalendarioSlotCrearDialog' })
 
@@ -24,7 +29,12 @@ const emit = defineEmits<{
   'add-task': [startTime?: string]
 }>()
 
-const canCreate = computed(() => !date.value || !isDateBeforeToday(date.value))
+const canCreate = computed(
+  () => !date.value || isCalendarSlotCreateAllowed(date.value, props.slotTime),
+)
+const pastMessage = computed(() =>
+  props.slotTime ? CALENDAR_PAST_SLOT_MESSAGE : CALENDAR_PAST_DATE_MESSAGE,
+)
 
 const dateTimeLabel = computed(() => {
   if (!date.value) return '—'
@@ -84,11 +94,11 @@ function onAddTask() {
             <DialogPanel
               class="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-black/5 dark:bg-gray-900 dark:ring-white/10"
             >
-              <div class="border-b border-[#dadce0] px-5 py-4 dark:border-white/10">
-                <DialogTitle class="text-base font-semibold text-[#3c4043] dark:text-white">
+              <div class="border-b border-gray-200 px-5 py-4 dark:border-white/10">
+                <DialogTitle class="text-base font-semibold text-gray-900 dark:text-white">
                   Nueva actividad
                 </DialogTitle>
-                <p class="mt-1 text-sm text-[#70757a] dark:text-gray-400">
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
                   <time v-if="date" :datetime="date">{{ dateTimeLabel }}</time>
                 </p>
               </div>
@@ -98,22 +108,22 @@ function onAddTask() {
                   v-if="!canCreate"
                   class="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
                 >
-                  {{ CALENDAR_PAST_DATE_MESSAGE }}
+                  {{ pastMessage }}
                 </p>
                 <button
                   type="button"
                   :disabled="!canCreate"
-                  class="flex w-full items-center gap-3 rounded-xl border border-[#dadce0] bg-white px-4 py-3.5 text-left transition-colors hover:border-[#1a73e8] hover:bg-[#e8f0fe]/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:bg-[#292a2d] dark:hover:border-[#8ab4f8] dark:hover:bg-[#394457]/50"
+                  class="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-left transition-colors hover:border-indigo-400 hover:bg-indigo-50/80 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:bg-gray-800 dark:hover:border-indigo-500/50 dark:hover:bg-indigo-500/10"
                   @click="onAddEvent"
                 >
                   <span
-                    class="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e8f0fe] text-[#1a73e8] dark:bg-[#394457] dark:text-[#8ab4f8]"
+                    class="flex size-10 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400"
                   >
                     <CalendarDaysIcon class="size-5" aria-hidden="true" />
                   </span>
                   <span>
-                    <span class="block text-sm font-semibold text-[#3c4043] dark:text-white">Crear evento</span>
-                    <span class="block text-xs text-[#70757a] dark:text-gray-400">
+                    <span class="block text-sm font-semibold text-gray-900 dark:text-white">Crear evento</span>
+                    <span class="block text-xs text-gray-500 dark:text-gray-400">
                       {{ slotTime ? 'Con horario en el calendario' : 'Actividad con fecha y hora' }}
                     </span>
                   </span>
@@ -122,7 +132,7 @@ function onAddTask() {
                 <button
                   type="button"
                   :disabled="!canCreate"
-                  class="flex w-full items-center gap-3 rounded-xl border border-[#dadce0] bg-white px-4 py-3.5 text-left transition-colors hover:border-[#8E24AA] hover:bg-violet-50/80 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:bg-[#292a2d] dark:hover:border-violet-500/50 dark:hover:bg-violet-950/30"
+                  class="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-left transition-colors hover:border-violet-400 hover:bg-violet-50/80 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:bg-gray-800 dark:hover:border-violet-500/50 dark:hover:bg-violet-950/30"
                   @click="onAddTask"
                 >
                   <span
@@ -131,18 +141,18 @@ function onAddTask() {
                     <CheckCircleIcon class="size-5" aria-hidden="true" />
                   </span>
                   <span>
-                    <span class="block text-sm font-semibold text-[#3c4043] dark:text-white">Crear tarea</span>
-                    <span class="block text-xs text-[#70757a] dark:text-gray-400">
+                    <span class="block text-sm font-semibold text-gray-900 dark:text-white">Crear tarea</span>
+                    <span class="block text-xs text-gray-500 dark:text-gray-400">
                       {{ slotTime ? `Para las ${slotTime}` : 'Para este día' }}
                     </span>
                   </span>
                 </button>
               </div>
 
-              <div class="border-t border-[#dadce0] px-5 py-3 dark:border-white/10">
+              <div class="border-t border-gray-200 px-5 py-3 dark:border-white/10">
                 <button
                   type="button"
-                  class="w-full rounded-lg py-2 text-sm font-medium text-[#70757a] hover:bg-[#f1f3f4] dark:text-gray-400 dark:hover:bg-white/10"
+                  class="w-full rounded-lg py-2 text-sm font-medium text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/10"
                   @click="close"
                 >
                   Cancelar

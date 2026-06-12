@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useCalendarClock } from '@/composables/useCalendarClock'
+import { useCalendarioNowLine } from '@/composables/useCalendarioNowLine'
+import { useCalendarioPastSlots } from '@/composables/useCalendarioPastSlots'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/20/solid'
 import type { CalEvent } from '@/data/calendarioEscolarDemo'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
@@ -24,15 +27,35 @@ import {
   mondayIndex,
   parseYmd,
   startOfWeekMonday,
+  todayYmd,
 } from '@/utils/calendarioDates'
 import type { CalendarioContentMode, CalendarioDisplayView } from '@/utils/calendarioDates'
-import { gcalShell, gcalTodayBadge } from '@/utils/calendarioGoogleTheme'
+import {
+  gcalPastSlotDisabled,
+  gcalPastTodaySlot,
+  gcalPastWeekColumn,
+  gcalShell,
+  gcalSurface,
+  gcalTodayBadge,
+  gcalWeekSlotAvailable,
+  gcalWeekSlotHover,
+  gcalWeekSlotHoverActive,
+} from '@/utils/calendarioGoogleTheme'
 import CalendarioEscolarNavToolbar from '@/components/calendario/CalendarioEscolarNavToolbar.vue'
+import CalendarioNowLineOverlay from '@/components/calendario/CalendarioNowLineOverlay.vue'
 import CalendarioSlotCrearDialog from '@/components/calendario/CalendarioSlotCrearDialog.vue'
 import CalendarioItemDetalleDialog, {
   type CalendarioDetalle,
 } from '@/components/calendario/CalendarioItemDetalleDialog.vue'
 import type { CalTask } from '@/data/calendarioEscolarTypes'
+import {
+  CALENDARIO_DAY_START_HOUR,
+  calendarioGridMinHeight,
+  calendarioGridRows,
+  calendarioGridRowsStyle,
+  calendarioHourCount,
+  calendarioHourLabel,
+} from '@/utils/calendarioGridConstants'
 
 defineOptions({ name: 'CalendarioEscolarDay' })
 
@@ -47,19 +70,50 @@ defineEmits<{
   refresh: []
 }>()
 const DAY_GRID_COLS = 'grid-cols-[3.5rem_minmax(0,1fr)]'
-const DAY_START_HOUR = 7
-const hours = Array.from({ length: 24 - DAY_START_HOUR }, (_, i) => DAY_START_HOUR + i)
-const GRID_ROWS = hours.length * 2 + 1
-const gridBodyMinHeight = `${hours.length * 3.5 + 1.75}rem`
-const gridRowsStyle = `repeat(${GRID_ROWS}, minmax(3.5rem, 1fr))`
+const DAY_START_HOUR = CALENDARIO_DAY_START_HOUR
+const hours = Array.from({ length: calendarioHourCount() }, (_, i) => DAY_START_HOUR + i)
+const GRID_ROWS = calendarioGridRows(hours.length)
+const gridBodyMinHeight = calendarioGridMinHeight(hours.length)
+const gridRowsStyle = calendarioGridRowsStyle(hours.length)
 const dayStartMinutes = DAY_START_HOUR * 60
 
 const { porFecha: eventosPorFecha, moveEvent, resizeEvent } = useCalendarioEscolarEvents()
 const { tareasDelDia, moveTask, resizeTask } = useCalendarioEscolarTasks()
 
 const gridRef = ref<HTMLElement | null>(null)
+const scrollContainerRef = ref<HTMLElement | null>(null)
+const now = useCalendarClock()
 
 const dayYmd = computed(() => formatYmd(focusDay.value))
+
+const { showNowLine, nowLineTopPercent, nowLineLabel, scrollToNowCentered } = useCalendarioNowLine({
+  now,
+  dayStartMinutes,
+  gridRows: GRID_ROWS,
+  isTodayVisible: () => dayYmd.value === todayYmd(now.value),
+})
+
+function alignScrollToNow(): void {
+  void scrollToNowCentered(scrollContainerRef.value, gridRef.value)
+}
+
+watch(showNowLine, (visible) => {
+  if (visible) alignScrollToNow()
+})
+
+watch(dayYmd, () => {
+  if (showNowLine.value) alignScrollToNow()
+})
+
+onMounted(() => {
+  if (showNowLine.value) alignScrollToNow()
+})
+const { isSlotDisabled: isDaySlotDisabled } = useCalendarioPastSlots(
+  now,
+  dayStartMinutes,
+  GRID_ROWS,
+  () => [{ date: dayYmd.value }],
+)
 
 const { dragging, hover, beginDrag, isDraggingItem, isHoverCell, justDragged, showDragPreview } = useCalendarioGridDrag({
   gridRef,
@@ -227,13 +281,6 @@ const miniMonthDatetimeAttr = computed(() => {
 
 const miniWeekLabels = ['L', 'M', 'X', 'J', 'V', 'S', 'D'] as const
 
-function hourLabel(h: number): string {
-  if (h === 0) return '12AM'
-  if (h < 12) return `${h}AM`
-  if (h === 12) return '12PM'
-  return `${h - 12}PM`
-}
-
 interface DaySlot {
   key: string
   startTime: string
@@ -259,10 +306,27 @@ const clickableSlots = computed((): DaySlot[] => {
 const slotCrearOpen = ref(false)
 const selectedSlotTime = ref<string | null>(null)
 
+function isSlotDisabled(startTime: string): boolean {
+  return isDaySlotDisabled(dayYmd.value, startTime)
+}
+
+function slotCellClass(time: string): string {
+  if (isDateBeforeToday(dayYmd.value, now.value)) return gcalPastWeekColumn
+  if (isSlotDisabled(time)) return gcalPastTodaySlot
+  return gcalWeekSlotAvailable
+}
+
+function padCellClass(): string {
+  return slotCellClass(formatTimeLabel(DAY_START_HOUR, 0))
+}
+
+function hourGridRow(hourIndex: number, half: 'a' | 'b'): number {
+  return half === 'a' ? 2 + hourIndex * 2 : 3 + hourIndex * 2
+}
+
 function onSlotClick(startTime: string) {
-  const date = formatYmd(focusDay.value)
-  if (isDateBeforeToday(date)) return
-  selectedDate.value = date
+  if (isSlotDisabled(startTime)) return
+  selectedDate.value = dayYmd.value
   selectedSlotTime.value = startTime
   slotCrearOpen.value = true
 }
@@ -486,7 +550,7 @@ function openTaskDetail(task: CalTask) {
       @refresh="$emit('refresh')"
     />
 
-    <div class="isolate flex min-h-0 flex-1 overflow-hidden bg-white dark:bg-[#202124]">
+    <div :class="['isolate flex min-h-0 flex-1', gcalSurface]">
       <div class="flex min-h-0 min-w-0 flex-1 flex-col">
         <div
           v-if="allDayEvents.length > 0"
@@ -547,29 +611,47 @@ function openTaskDetail(task: CalTask) {
           </button>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-auto [scrollbar-gutter:stable]">
-          <div class="min-w-[16rem]">
+        <div class="gcal-grid-with-gutter min-h-0 flex-1">
+          <div
+            class="gcal-scroll-viewport min-h-0 flex-1 border-r border-gray-200 dark:border-white/10"
+          >
+            <div ref="scrollContainerRef" class="gcal-scroll-outside h-full min-h-0">
+              <div class="min-w-[16rem]">
             <div
               ref="gridRef"
               class="relative grid divide-x divide-gray-200 dark:divide-white/5"
               :class="DAY_GRID_COLS"
               :style="{ gridTemplateRows: gridRowsStyle, minHeight: gridBodyMinHeight }"
             >
-              <div class="bg-gray-50 dark:bg-gray-950" aria-hidden="true"></div>
-              <div class="border-t border-gray-200 bg-gray-50 dark:border-white/5 dark:bg-gray-950" aria-hidden="true"></div>
+              <div
+                :class="gcalWeekSlotAvailable"
+                style="grid-row: 1; grid-column: 1"
+                aria-hidden="true"
+              ></div>
+              <div
+                :class="['border-t border-gray-200 dark:border-white/5', padCellClass()]"
+                style="grid-row: 1; grid-column: 2"
+                aria-hidden="true"
+              ></div>
 
-              <template v-for="h in hours" :key="h">
+              <template v-for="(h, hourIndex) in hours" :key="h">
                 <div
-                  class="sticky left-0 z-10 bg-gray-50 px-1 text-right text-xs/5 text-gray-500 dark:bg-gray-950 dark:text-gray-400"
+                  :class="['sticky left-0 z-10 px-1 text-right text-[10px] leading-none text-gray-500 dark:text-gray-400', gcalWeekSlotAvailable]"
+                  :style="{ gridRow: `${hourGridRow(hourIndex, 'a')} / span 2`, gridColumn: 1 }"
                 >
-                  <span class="-mt-2 block pr-1">{{ hourLabel(h) }}</span>
+                  <span class="relative -top-2 block pr-1">{{ calendarioHourLabel(h) }}</span>
                 </div>
-                <div class="border-t border-gray-200 bg-gray-50 dark:border-white/5 dark:bg-gray-950"></div>
                 <div
-                  class="sticky left-0 z-10 border-t border-gray-200 bg-gray-50 dark:border-white/5 dark:bg-gray-950"
-                  aria-hidden="true"
+                  :class="[
+                    'border-t border-gray-200 dark:border-white/5',
+                    slotCellClass(formatTimeLabel(h, 0)),
+                  ]"
+                  :style="{ gridRow: hourGridRow(hourIndex, 'a'), gridColumn: 2 }"
                 ></div>
-                <div class="border-t border-gray-200 bg-gray-50 dark:border-white/5 dark:bg-gray-950"></div>
+                <div
+                  :class="slotCellClass(formatTimeLabel(h, 30))"
+                  :style="{ gridRow: hourGridRow(hourIndex, 'b'), gridColumn: 2 }"
+                ></div>
               </template>
 
               <ol
@@ -586,9 +668,23 @@ function openTaskDetail(task: CalTask) {
                 >
                   <button
                     type="button"
-                    class="absolute inset-0 cursor-pointer hover:bg-[#1a73e8]/8 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a73e8] dark:hover:bg-[#8ab4f8]/10"
-                    :class="isHoverCell(0, slot.gridRow) && !dragging ? 'bg-[#1a73e8]/15 ring-2 ring-inset ring-[#1a73e8]/40' : ''"
-                    :aria-label="`Crear actividad a las ${slot.startTime}`"
+                    class="absolute inset-0 focus:outline-none"
+                    :class="
+                      isSlotDisabled(slot.startTime)
+                        ? gcalPastSlotDisabled
+                        : [
+                            gcalWeekSlotHover,
+                            isHoverCell(0, slot.gridRow) && !dragging
+                              ? gcalWeekSlotHoverActive
+                              : '',
+                          ]
+                    "
+                    :aria-label="
+                      isSlotDisabled(slot.startTime)
+                        ? `No disponible ${slot.startTime}`
+                        : `Crear actividad a las ${slot.startTime}`
+                    "
+                    :disabled="isSlotDisabled(slot.startTime)"
                     @click="!dragging && onSlotClick(slot.startTime)"
                   />
                 </li>
@@ -701,8 +797,17 @@ function openTaskDetail(task: CalTask) {
                   </div>
                 </li>
               </ol>
+
+              <CalendarioNowLineOverlay
+                :show="showNowLine"
+                :top-percent="nowLineTopPercent"
+                :label="nowLineLabel"
+              />
+            </div>
+              </div>
             </div>
           </div>
+          <div class="gcal-scrollbar-gutter" aria-hidden="true"></div>
         </div>
       </div>
 
@@ -748,7 +853,7 @@ function openTaskDetail(task: CalTask) {
           >
             <time
               :datetime="day.date"
-              class="mx-auto flex size-7 items-center justify-center rounded-full in-data-is-selected:not-in-data-is-today:bg-[#1a73e8] in-data-is-selected:in-data-is-today:bg-[#1a73e8] in-data-is-selected:text-white in-data-is-today:bg-[#1a73e8] in-data-is-today:font-medium in-data-is-today:text-white"
+              class="mx-auto flex size-7 items-center justify-center rounded-full in-data-is-selected:not-in-data-is-today:bg-indigo-600 in-data-is-selected:in-data-is-today:bg-indigo-600 in-data-is-selected:text-white in-data-is-today:bg-indigo-600 in-data-is-today:font-medium in-data-is-today:text-white dark:in-data-is-selected:not-in-data-is-today:bg-indigo-500 dark:in-data-is-selected:in-data-is-today:bg-indigo-500 dark:in-data-is-today:bg-indigo-500"
             >{{ miniDayNum(day.date) }}</time>
           </button>
         </div>

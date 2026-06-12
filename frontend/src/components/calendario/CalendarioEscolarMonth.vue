@@ -5,7 +5,7 @@ import type { CalEvent } from '@/data/calendarioEscolarDemo'
 import type { CalTask } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
 import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
-import { formatYmd, mondayIndex } from '@/utils/calendarioDates'
+import { formatYmd, isDateBeforeToday, mondayIndex } from '@/utils/calendarioDates'
 import { monthEventBubbleClass } from '@/utils/calendarioEventStyles'
 import { monthTaskBubbleClass, taskDisplayTitle } from '@/utils/calendarioTaskStyles'
 import type { CalendarioContentMode, CalendarioDisplayView } from '@/utils/calendarioDates'
@@ -16,6 +16,7 @@ import {
   gcalMoreLink,
   gcalMutedText,
   gcalOtherMonthOverlay,
+  gcalPastDayOverlay,
   gcalShell,
   gcalTodayBadge,
   gcalWeekdayHeader,
@@ -47,6 +48,7 @@ interface DayCell {
   isCurrentMonth?: boolean
   isToday?: boolean
   isSelected?: boolean
+  isPast?: boolean
   events: CalEvent[]
   tasks: CalTask[]
 }
@@ -100,6 +102,7 @@ function buildMonth(y: number, m: number): DayCell[] {
       isCurrentMonth,
       isToday: dateStr === todayStr,
       isSelected: selectedDate.value === dateStr,
+      isPast: isDateBeforeToday(dateStr),
       events: contentMode.value === 'tareas' ? [] : (porFecha.value[dateStr] ?? []),
       tasks: tareasPorFecha.value[dateStr] ?? [],
     })
@@ -177,6 +180,9 @@ function openDetail(item: CalendarioDetalle, anchor: DOMRect) {
 function selectDayFromElement(date: string, el: HTMLElement): void {
   const day = days.value.find((d) => d.date === date)
   const hasItems = day ? dayItemCount(day) > 0 : false
+
+  if (isDateBeforeToday(date) && !hasItems) return
+
   selectedDate.value = date
 
   if (isDesktopMonth() && hasItems) {
@@ -275,7 +281,7 @@ const weekDays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'] as const
         <div
           v-for="(wd, i) in weekDays"
           :key="i"
-          :class="['bg-white dark:bg-[#202124]', gcalWeekdayHeader]"
+          :class="['bg-gray-50 dark:bg-gray-800', gcalWeekdayHeader]"
         >
           <span class="sm:hidden">{{ wd.slice(0, 1) }}</span>
           <span class="hidden sm:inline">{{ wd }}</span>
@@ -288,11 +294,18 @@ const weekDays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'] as const
           :key="day.date"
           role="button"
           tabindex="0"
-          :class="gcalDayCell"
+          :class="[
+            gcalDayCell,
+            day.isPast && dayItemCount(day) === 0
+              ? 'cursor-default hover:bg-gray-50 dark:hover:bg-gray-800'
+              : '',
+            day.isPast ? 'opacity-60' : '',
+          ]"
           @click="selectDay(day.date, $event)"
           @keydown.enter.prevent="selectDayKeydown(day.date, $event)"
         >
           <div v-if="!day.isCurrentMonth" :class="gcalOtherMonthOverlay" aria-hidden="true" />
+          <div v-if="day.isPast" :class="gcalPastDayOverlay" aria-hidden="true" />
           <time
             :datetime="day.date"
             :class="[
@@ -348,9 +361,14 @@ const weekDays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'] as const
               gcalDayCell,
               'h-14 border-0',
               !day.isCurrentMonth ? 'opacity-60' : '',
+              day.isPast && dayItemCount(day) === 0
+                ? 'cursor-default hover:bg-gray-50 dark:hover:bg-gray-800'
+                : '',
+              day.isPast ? 'opacity-55' : '',
             ]"
             @click="selectDay(day.date, $event)"
           >
+            <div v-if="day.isPast" :class="gcalPastDayOverlay" aria-hidden="true" />
             <time
               :datetime="day.date"
               :class="[gcalDayNum, day.isToday ? gcalTodayBadge : '']"
@@ -374,7 +392,7 @@ const weekDays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'] as const
         </div>
 
         <div
-          class="relative shrink-0 border-t bg-[#f8f9fa] px-4 py-6 sm:px-6 dark:border-white/10 dark:bg-[#202124]"
+          class="relative shrink-0 border-t bg-gray-50 px-4 py-6 sm:px-6 dark:border-white/10 dark:bg-gray-900"
           :class="gcalBorder"
         >
           <ol
@@ -385,18 +403,18 @@ const weekDays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'] as const
             <li
               v-for="event in mobileEvents"
               :key="`${event.id}-${event.dayDate}`"
-              class="group flex p-4 pr-6 hover:bg-[#f1f3f4] dark:hover:bg-white/5"
+              class="group flex p-4 pr-6 hover:bg-gray-50 dark:hover:bg-white/5"
             >
               <div class="flex-auto">
                 <p class="font-medium text-[#3c4043] dark:text-white">{{ event.name }}</p>
-                <time :datetime="event.datetime" class="mt-2 flex items-center text-[#70757a] dark:text-gray-300">
-                  <ClockIcon class="mr-2 size-5 shrink-0 text-[#70757a]" aria-hidden="true" />
+                <time :datetime="event.datetime" class="mt-2 flex items-center text-gray-500 dark:text-gray-300">
+                  <ClockIcon class="mr-2 size-5 shrink-0 text-gray-500" aria-hidden="true" />
                   {{ event.time }}
                 </time>
               </div>
             </li>
           </ol>
-          <p v-else class="text-center text-sm text-[#70757a] dark:text-gray-400">No hay eventos este mes.</p>
+          <p v-else class="text-center text-sm text-gray-500 dark:text-gray-400">No hay eventos este mes.</p>
         </div>
       </div>
     </div>

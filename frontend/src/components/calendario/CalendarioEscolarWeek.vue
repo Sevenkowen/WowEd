@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useCalendarClock } from '@/composables/useCalendarClock'
+import { useCalendarioNowLine } from '@/composables/useCalendarioNowLine'
+import { useCalendarioPastSlots } from '@/composables/useCalendarioPastSlots'
 import type { CalEvent } from '@/data/calendarioEscolarDemo'
 import type { CalTask } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
@@ -24,11 +27,38 @@ import {
   isDateBeforeToday,
   parseYmd,
   startOfWeekMonday,
+  todayYmd,
 } from '@/utils/calendarioDates'
 import type { CalendarioContentMode, CalendarioDisplayView } from '@/utils/calendarioDates'
-import { gcalBorder, gcalShell, gcalTodayBadge } from '@/utils/calendarioGoogleTheme'
+import {
+  gcalBorder,
+  gcalPastDayHeader,
+  gcalPastDayHeaderWithItems,
+  gcalPastSlotDisabled,
+  gcalPastTodaySlot,
+  gcalPastWeekColumn,
+  gcalShell,
+  gcalSurface,
+  gcalTodayBadge,
+  gcalWeekSlotAvailable,
+  gcalWeekSlotHover,
+  gcalWeekSlotHoverActive,
+} from '@/utils/calendarioGoogleTheme'
 import CalendarioEscolarNavToolbar from '@/components/calendario/CalendarioEscolarNavToolbar.vue'
+import CalendarioDiaEventosDialog from '@/components/calendario/CalendarioDiaEventosDialog.vue'
+import CalendarioItemDetalleDialog, {
+  type CalendarioDetalle,
+} from '@/components/calendario/CalendarioItemDetalleDialog.vue'
+import CalendarioNowLineOverlay from '@/components/calendario/CalendarioNowLineOverlay.vue'
 import CalendarioSlotCrearDialog from '@/components/calendario/CalendarioSlotCrearDialog.vue'
+import {
+  CALENDARIO_DAY_START_HOUR,
+  calendarioGridMinHeight,
+  calendarioGridRows,
+  calendarioGridRowsStyle,
+  calendarioHourCount,
+  calendarioHourLabel,
+} from '@/utils/calendarioGridConstants'
 
 defineOptions({ name: 'CalendarioEscolarWeek' })
 
@@ -44,24 +74,26 @@ defineEmits<{
 }>()
 /** Misma grilla en cabecera y cuerpo: columna horas + 7 días */
 const WEEK_GRID_COLS = 'grid-cols-[3.5rem_repeat(7,minmax(0,1fr))]'
-const DAY_START_HOUR = 7
-const hours = Array.from({ length: 24 - DAY_START_HOUR }, (_, i) => DAY_START_HOUR + i)
-/** +1 fila vacía bajo cabecera de días (evita solapar la 1.ª media hora de 7:00) */
-const GRID_ROWS = hours.length * 2 + 1
-const gridBodyMinHeight = `${hours.length * 3.5 + 1.75}rem`
-const gridRowsStyle = `repeat(${GRID_ROWS}, minmax(3.5rem, 1fr))`
+const DAY_START_HOUR = CALENDARIO_DAY_START_HOUR
+const hours = Array.from({ length: calendarioHourCount() }, (_, i) => DAY_START_HOUR + i)
+const GRID_ROWS = calendarioGridRows(hours.length)
+const gridBodyMinHeight = calendarioGridMinHeight(hours.length)
+const gridRowsStyle = calendarioGridRowsStyle(hours.length)
 const dayStartMinutes = DAY_START_HOUR * 60
 
 const { porFecha: eventosPorFecha, moveEvent, resizeEvent } = useCalendarioEscolarEvents()
 const { tareasDelDia, moveTask, resizeTask } = useCalendarioEscolarTasks()
 
 const gridRef = ref<HTMLElement | null>(null)
+const scrollContainerRef = ref<HTMLElement | null>(null)
+const now = useCalendarClock()
 
 function dateForDragItem(item: CalendarioDragItem): string | null {
   return weekDays.value[item.dayIndex]?.date ?? null
 }
 
-const { dragging, hover, beginDrag, isDraggingItem, isHoverCell, showDragPreview } = useCalendarioGridDrag({
+const { dragging, hover, beginDrag, isDraggingItem, isHoverCell, showDragPreview, justDragged } =
+  useCalendarioGridDrag({
   gridRef,
   dayCount: 7,
   gridRows: GRID_ROWS,
@@ -75,7 +107,7 @@ const { dragging, hover, beginDrag, isDraggingItem, isHoverCell, showDragPreview
     if (item.kind === 'event') moveEvent(item.id, date, startTime)
     else moveTask(item.id, date, startTime)
   },
-})
+  })
 
 function dragItemClass(item: CalendarioDragItem, extra = ''): string {
   if (isDraggingItem(item)) {
@@ -151,11 +183,11 @@ interface WeekDay {
   longLabel: string
   isToday: boolean
   isSelected: boolean
+  isPast: boolean
 }
 
-const todayStr = formatYmd(new Date())
-
 const weekDays = computed((): WeekDay[] => {
+  const today = todayYmd(now.value)
   return Array.from({ length: 7 }, (_, i) => {
     const d = addDays(weekStart.value, i)
     const date = formatYmd(d)
@@ -164,11 +196,78 @@ const weekDays = computed((): WeekDay[] => {
       dayNum: d.getDate(),
       shortLabel: weekDaysShort[i],
       longLabel: weekDaysLong[i],
-      isToday: date === todayStr,
+      isToday: date === today,
       isSelected: selectedDate.value === date,
+      isPast: isDateBeforeToday(date, now.value),
     }
   })
 })
+
+const { showNowLine, nowLineTopPercent, nowLineLabel, scrollToNowCentered } = useCalendarioNowLine({
+  now,
+  dayStartMinutes,
+  gridRows: GRID_ROWS,
+  isTodayVisible: () => weekDays.value.some((d) => d.isToday),
+})
+
+function alignScrollToNow(): void {
+  void scrollToNowCentered(scrollContainerRef.value, gridRef.value)
+}
+
+watch(showNowLine, (visible) => {
+  if (visible) alignScrollToNow()
+})
+
+watch(
+  () => formatYmd(weekStart.value),
+  () => {
+    if (showNowLine.value) alignScrollToNow()
+  },
+)
+
+onMounted(() => {
+  if (showNowLine.value) alignScrollToNow()
+})
+
+const { isSlotDisabled } = useCalendarioPastSlots(
+  now,
+  dayStartMinutes,
+  GRID_ROWS,
+  () => weekDays.value,
+)
+
+function slotCellClass(day: WeekDay, time: string): string {
+  if (day.isPast) return gcalPastWeekColumn
+  if (isSlotDisabled(day.date, time)) return gcalPastTodaySlot
+  return gcalWeekSlotAvailable
+}
+
+/** Fila de rellajo bajo cabeceras: en hoy hereda el estado de la 1.ª franja (12 AM). */
+function padCellClass(day: WeekDay): string {
+  return slotCellClass(day, formatTimeLabel(DAY_START_HOUR, 0))
+}
+
+function hourGridRow(hourIndex: number, half: 'a' | 'b'): number {
+  return half === 'a' ? 2 + hourIndex * 2 : 3 + hourIndex * 2
+}
+
+function dayHasItems(date: string): boolean {
+  const events = eventosPorFecha.value[date]?.length ?? 0
+  const tasks = tareasDelDia(date).length
+  return events + tasks > 0
+}
+
+function dayHeaderClass(day: WeekDay): string {
+  const base =
+    'flex flex-col items-center justify-center gap-1 py-2.5 sm:flex-row sm:gap-1.5 sm:py-3'
+  if (!day.isPast) {
+    return `${base} hover:bg-gray-50 dark:hover:bg-white/5`
+  }
+  if (dayHasItems(day.date)) {
+    return `${base} ${gcalPastDayHeaderWithItems}`
+  }
+  return `${base} ${gcalPastDayHeader}`
+}
 
 const weekTitle = computed(() => {
   const start = weekDays.value[0]
@@ -192,13 +291,6 @@ function padWeek(d: Date): string {
   const onejan = new Date(d.getFullYear(), 0, 1)
   const week = Math.ceil(((d.getTime() - onejan.getTime()) / 86400000 + onejan.getDay() + 1) / 7)
   return week < 10 ? `0${week}` : String(week)
-}
-
-function hourLabel(h: number): string {
-  if (h === 0) return '12AM'
-  if (h < 12) return `${h}AM`
-  if (h === 12) return '12PM'
-  return `${h - 12}PM`
 }
 
 type WeekTimedEvent = CalEvent & {
@@ -281,6 +373,7 @@ const {
   previewSpan: taskPreviewSpan,
   isResizingItem: isResizingTask,
   preview: taskResizePreview,
+  justResized: justTaskResized,
 } = useCalendarioGridResize({
   gridRef,
   gridRows: GRID_ROWS,
@@ -300,6 +393,7 @@ const {
   previewSpan: eventPreviewSpan,
   isResizingItem: isResizingEvent,
   preview: eventResizePreview,
+  justResized: justEventResized,
 } = useCalendarioGridResize({
   gridRef,
   gridRows: GRID_ROWS,
@@ -313,6 +407,21 @@ const {
   },
   onCommit: (id, endTime) => resizeEvent(id, endTime),
 })
+
+const justResized = computed(() => justTaskResized.value || justEventResized.value)
+
+const detalleOpen = ref(false)
+const detalle = ref<CalendarioDetalle | null>(null)
+
+function openEventDetail(event: CalEvent): void {
+  detalle.value = { type: 'event', event }
+  detalleOpen.value = true
+}
+
+function openTaskDetail(task: CalTask): void {
+  detalle.value = { type: 'task', task }
+  detalleOpen.value = true
+}
 
 function taskSpan(task: WeekTimedTask): number {
   return taskPreviewSpan(task.id, task.gridSpan)
@@ -399,6 +508,7 @@ const clickableSlots = computed((): WeekSlot[] => {
 })
 
 const slotCrearOpen = ref(false)
+const dayEventsOpen = ref(false)
 const selectedSlotTime = ref<string | null>(null)
 
 function prevWeek() {
@@ -416,14 +526,18 @@ function goToday() {
 }
 
 function selectDay(date: string) {
-  if (isDateBeforeToday(date)) return
   selectedDate.value = date
   selectedSlotTime.value = null
+  if (isDateBeforeToday(date)) {
+    if (!dayHasItems(date)) return
+    dayEventsOpen.value = true
+    return
+  }
   slotCrearOpen.value = true
 }
 
 function onSlotClick(date: string, startTime: string) {
-  if (isDateBeforeToday(date)) return
+  if (isSlotDisabled(date, startTime)) return
   selectedDate.value = date
   selectedSlotTime.value = startTime
   slotCrearOpen.value = true
@@ -464,123 +578,141 @@ function linkedEventName(eventId: string): string | null {
       @refresh="$emit('refresh')"
     />
 
-    <div class="isolate flex min-h-0 flex-1 flex-col overflow-hidden bg-white dark:bg-[#202124]">
-      <div
-        class="grid shrink-0 divide-x bg-white text-sm/6 text-[#70757a] dark:divide-white/10 dark:bg-[#202124]"
-        :class="[WEEK_GRID_COLS, gcalBorder, 'border-b']"
-      >
-        <div aria-hidden="true"></div>
-        <button
-          v-for="day in weekDays"
-          :key="day.date"
-          type="button"
-          class="flex flex-col items-center justify-center gap-1 py-2.5 hover:bg-[#f1f3f4] sm:flex-row sm:gap-1.5 sm:py-3 dark:hover:bg-white/5"
-          @click="selectDay(day.date)"
-        >
-          <span class="text-[11px] font-medium uppercase sm:hidden">{{ day.shortLabel }}</span>
-          <span class="hidden text-[11px] font-medium uppercase sm:inline">{{ day.longLabel }}</span>
-          <span
-            :class="[
-              'flex size-8 items-center justify-center text-sm font-normal text-[#3c4043] dark:text-gray-100',
-              day.isToday ? gcalTodayBadge : '',
-            ]"
-          >{{ day.dayNum }}</span>
-        </button>
-      </div>
-
-      <div
-        v-if="hasWeekAllDayEvents"
-        class="grid shrink-0 divide-x divide-gray-200 border-b border-gray-200 bg-white dark:divide-white/10 dark:border-white/10 dark:bg-gray-900"
-        :class="WEEK_GRID_COLS"
-      >
-        <div class="px-2 py-2 text-[10px] font-semibold tracking-wide text-gray-400 uppercase dark:text-gray-500">
-          Todo el día
-        </div>
+    <div :class="['isolate flex min-h-0 flex-1 flex-col', gcalSurface]">
+      <div class="gcal-grid-with-gutter min-h-0 flex-1">
         <div
-          v-for="day in weekDays"
-          :key="`allday-${day.date}`"
-          class="flex flex-wrap gap-1 px-1.5 py-2"
+          class="gcal-scroll-viewport min-h-0 flex-1 border-r border-gray-200 dark:border-white/10"
         >
-          <span
-            v-for="ev in weekAllDayEvents(day.date)"
-            :key="ev.id"
-            :class="[monthEventBubbleClass(ev), 'max-w-full']"
-            :title="ev.name"
-          >
-            {{ ev.name }}
-          </span>
-        </div>
-      </div>
-
-      <div
-        v-if="hasWeekTasks"
-        class="grid shrink-0 divide-x divide-gray-200 border-b border-gray-200 bg-white dark:divide-white/10 dark:border-white/10 dark:bg-gray-900"
-        :class="WEEK_GRID_COLS"
-      >
-        <div class="px-2 py-2 text-[10px] font-semibold tracking-wide text-gray-400 uppercase dark:text-gray-500">
-          Tareas
-        </div>
-        <div
-          v-for="day in weekDays"
-          :key="`tasks-${day.date}`"
-          class="space-y-1.5 px-1.5 py-2"
-        >
-          <div
-            v-for="task in weekTasksSinHorario(day.date)"
-            :key="task.id"
-            :class="[sidebarTaskCardClass(!!task.eventId), 'text-xs']"
-          >
-            <div class="flex items-start gap-1.5">
-              <span :class="[sidebarTaskDotClass(), 'mt-0.5']" aria-hidden="true" />
-              <div class="min-w-0">
-                <p class="truncate font-medium text-gray-900 dark:text-white">{{ taskDisplayTitle(task) }}</p>
-                <p class="truncate text-[10px] text-gray-500 dark:text-gray-400">{{ taskTipoOf(task) }}</p>
-                <p
-                  v-if="task.eventId && linkedEventName(task.eventId)"
-                  class="truncate text-[10px] font-medium text-violet-700 dark:text-violet-300"
+          <div ref="scrollContainerRef" class="gcal-scroll-outside h-full min-h-0">
+          <div class="min-w-[40rem]">
+            <div class="sticky top-0 z-30" :class="gcalSurface">
+              <div
+                class="grid divide-x text-sm/6 text-gray-500 dark:divide-white/10"
+                :class="[WEEK_GRID_COLS, gcalBorder, 'border-b']"
+              >
+                <div aria-hidden="true"></div>
+                <button
+                  v-for="day in weekDays"
+                  :key="day.date"
+                  type="button"
+                  :class="dayHeaderClass(day)"
+                  @click="selectDay(day.date)"
                 >
-                  {{ linkedEventName(task.eventId) }}
-                </p>
+                  <span class="text-[11px] font-medium uppercase sm:hidden">{{ day.shortLabel }}</span>
+                  <span class="hidden text-[11px] font-medium uppercase sm:inline">{{ day.longLabel }}</span>
+                  <span
+                    :class="[
+                      'flex size-8 items-center justify-center text-sm font-normal text-[#3c4043] dark:text-gray-100',
+                      day.isToday ? gcalTodayBadge : '',
+                    ]"
+                  >{{ day.dayNum }}</span>
+                </button>
+              </div>
+
+              <div
+                v-if="hasWeekAllDayEvents"
+                class="grid divide-x divide-gray-200 border-b border-gray-200 dark:divide-white/10 dark:border-white/10"
+                :class="WEEK_GRID_COLS"
+              >
+                <div class="px-2 py-2 text-[10px] font-semibold tracking-wide text-gray-400 uppercase dark:text-gray-500">
+                  Todo el día
+                </div>
+                <div
+                  v-for="day in weekDays"
+                  :key="`allday-${day.date}`"
+                  class="flex flex-wrap gap-1 px-1.5 py-2"
+                >
+                  <button
+                    v-for="ev in weekAllDayEvents(day.date)"
+                    :key="ev.id"
+                    type="button"
+                    :class="[monthEventBubbleClass(ev), 'max-w-full cursor-pointer text-left']"
+                    :title="ev.name"
+                    @click="openEventDetail(ev)"
+                  >
+                    {{ ev.name }}
+                  </button>
+                </div>
+              </div>
+
+              <div
+                v-if="hasWeekTasks"
+                class="grid divide-x divide-gray-200 border-b border-gray-200 dark:divide-white/10 dark:border-white/10"
+                :class="WEEK_GRID_COLS"
+              >
+                <div class="px-2 py-2 text-[10px] font-semibold tracking-wide text-gray-400 uppercase dark:text-gray-500">
+                  Tareas
+                </div>
+                <div
+                  v-for="day in weekDays"
+                  :key="`tasks-${day.date}`"
+                  class="space-y-1.5 px-1.5 py-2"
+                >
+                  <div
+                    v-for="task in weekTasksSinHorario(day.date)"
+                    :key="task.id"
+                    :class="[sidebarTaskCardClass(!!task.eventId), 'text-xs']"
+                  >
+                    <div class="flex items-start gap-1.5">
+                      <span :class="[sidebarTaskDotClass(), 'mt-0.5']" aria-hidden="true" />
+                      <div class="min-w-0">
+                        <p class="truncate font-medium text-gray-900 dark:text-white">{{ taskDisplayTitle(task) }}</p>
+                        <p class="truncate text-[10px] text-gray-500 dark:text-gray-400">{{ taskTipoOf(task) }}</p>
+                        <p
+                          v-if="task.eventId && linkedEventName(task.eventId)"
+                          class="truncate text-[10px] font-medium text-violet-700 dark:text-violet-300"
+                        >
+                          {{ linkedEventName(task.eventId) }}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
 
-      <div class="min-h-0 flex-1 overflow-auto [scrollbar-gutter:stable]">
-        <div class="min-w-[40rem]">
+            <div
+              ref="gridRef"
+              class="relative grid divide-x divide-gray-200 dark:divide-white/5"
+              :class="WEEK_GRID_COLS"
+              :style="{ gridTemplateRows: gridRowsStyle, minHeight: gridBodyMinHeight }"
+            >
           <div
-            ref="gridRef"
-            class="relative grid divide-x divide-gray-200 dark:divide-white/5"
-            :class="WEEK_GRID_COLS"
-            :style="{ gridTemplateRows: gridRowsStyle, minHeight: gridBodyMinHeight }"
-          >
-          <div class="sticky left-0 z-10 bg-gray-50 dark:bg-gray-950" aria-hidden="true"></div>
+            :class="['sticky left-0 z-10', gcalWeekSlotAvailable]"
+            style="grid-row: 1; grid-column: 1"
+            aria-hidden="true"
+          ></div>
           <div
-            v-for="dayIndex in 7"
+            v-for="(day, dayIndex) in weekDays"
             :key="`pad-${dayIndex}`"
-            class="border-t border-gray-200 bg-gray-50 dark:border-white/5 dark:bg-gray-950"
+            :class="[
+              'border-t border-gray-200 dark:border-white/5',
+              padCellClass(day),
+            ]"
+            :style="{ gridRow: 1, gridColumn: dayIndex + 2 }"
           ></div>
 
-          <template v-for="h in hours" :key="h">
+          <template v-for="(h, hourIndex) in hours" :key="h">
             <div
-              class="sticky left-0 z-10 bg-gray-50 px-1 text-right text-xs/5 text-gray-500 dark:bg-gray-950 dark:text-gray-400"
+              :class="['sticky left-0 z-10 px-1 text-right text-[10px] leading-none text-gray-500 dark:text-gray-400', gcalWeekSlotAvailable]"
+              :style="{ gridRow: `${hourGridRow(hourIndex, 'a')} / span 2`, gridColumn: 1 }"
             >
-              <span class="-mt-2 block pr-1">{{ hourLabel(h) }}</span>
+              <span class="relative -top-2 block pr-1">{{ calendarioHourLabel(h) }}</span>
             </div>
             <div
-              v-for="dayIndex in 7"
+              v-for="(day, dayIndex) in weekDays"
               :key="`${h}-a-${dayIndex}`"
-              class="border-t border-gray-200 bg-gray-50 dark:border-white/5 dark:bg-gray-950"
+              :class="[
+                'border-t border-gray-200 dark:border-white/5',
+                slotCellClass(day, formatTimeLabel(h, 0)),
+              ]"
+              :style="{ gridRow: hourGridRow(hourIndex, 'a'), gridColumn: dayIndex + 2 }"
             ></div>
             <div
-              class="sticky left-0 z-10 border-t border-gray-200 bg-gray-50 dark:border-white/5 dark:bg-gray-950"
-              aria-hidden="true"
-            ></div>
-            <div
-              v-for="dayIndex in 7"
+              v-for="(day, dayIndex) in weekDays"
               :key="`${h}-b-${dayIndex}`"
-              class="border-t border-gray-200 bg-gray-50 dark:border-white/5 dark:bg-gray-950"
+              :class="slotCellClass(day, formatTimeLabel(h, 30))"
+              :style="{ gridRow: hourGridRow(hourIndex, 'b'), gridColumn: dayIndex + 2 }"
             ></div>
           </template>
 
@@ -598,9 +730,23 @@ function linkedEventName(eventId: string): string | null {
             >
               <button
                 type="button"
-                class="absolute inset-0 cursor-pointer hover:bg-[#1a73e8]/8 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#1a73e8] dark:hover:bg-[#8ab4f8]/10"
-                :class="isHoverCell(slot.colStart - 2, slot.gridRow) && !dragging ? 'bg-[#1a73e8]/15 ring-2 ring-inset ring-[#1a73e8]/40' : ''"
-                :aria-label="`Crear actividad el ${slot.date} a las ${slot.startTime}`"
+                class="absolute inset-0 focus:outline-none"
+                :class="
+                  isSlotDisabled(slot.date, slot.startTime)
+                    ? gcalPastSlotDisabled
+                    : [
+                        gcalWeekSlotHover,
+                        isHoverCell(slot.colStart - 2, slot.gridRow) && !dragging
+                          ? gcalWeekSlotHoverActive
+                          : '',
+                      ]
+                "
+                :aria-label="
+                  isSlotDisabled(slot.date, slot.startTime)
+                    ? `No disponible ${slot.date} ${slot.startTime}`
+                    : `Crear actividad el ${slot.date} a las ${slot.startTime}`
+                "
+                :disabled="isSlotDisabled(slot.date, slot.startTime)"
                 @click="!dragging && onSlotClick(slot.date, slot.startTime)"
               />
             </li>
@@ -618,9 +764,11 @@ function linkedEventName(eventId: string): string | null {
                 :class="[
                   timedTaskBlockClass(),
                   dragItemClass(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow)),
+                  'group text-left',
                   isResizingTask(task.id) ? 'ring-2 ring-white/50' : '',
                 ]"
                 @pointerdown="onItemPointerDown(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow), $event)"
+                @click="!justDragged && !justResized && openTaskDetail(task)"
               >
                 <p :class="timedTaskTitleClass()">{{ taskDisplayTitle(task) }}</p>
                 <p :class="timedTaskTimeClass()">{{ taskTimeLabel(task) }}</p>
@@ -647,14 +795,21 @@ function linkedEventName(eventId: string): string | null {
                 :class="[
                   timedEventBlockClass(ev),
                   dragEventClass(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow)),
+                  'group flex flex-col',
                   isResizingEvent(ev.id) ? 'ring-2 ring-white/50' : '',
                 ]"
                 @pointerdown="onItemPointerDown(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow), $event)"
               >
-                <p :class="timedEventTitleClass()">{{ ev.name }}</p>
-                <p :class="timedEventTimeClass()">
-                  <time :datetime="ev.datetime">{{ eventTimeLabel(ev) }}</time>
-                </p>
+                <button
+                  type="button"
+                  class="min-h-0 shrink-0 cursor-pointer text-left focus:outline-none"
+                  @click="!justDragged && !justResized && openEventDetail(ev)"
+                >
+                  <p :class="timedEventTitleClass()">{{ ev.name }}</p>
+                  <p :class="timedEventTimeClass()">
+                    <time :datetime="ev.datetime">{{ eventTimeLabel(ev) }}</time>
+                  </p>
+                </button>
                 <div
                   v-if="!isDateBeforeToday(ev.date) && !isDraggingItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow))"
                   data-cal-resize
@@ -689,8 +844,17 @@ function linkedEventName(eventId: string): string | null {
               </div>
             </li>
           </ol>
+
+            <CalendarioNowLineOverlay
+              :show="showNowLine"
+              :top-percent="nowLineTopPercent"
+              :label="nowLineLabel"
+            />
+            </div>
           </div>
         </div>
+        </div>
+        <div class="gcal-scrollbar-gutter" aria-hidden="true"></div>
       </div>
     </div>
 
@@ -701,5 +865,14 @@ function linkedEventName(eventId: string): string | null {
       @add-event="$emit('add-event', $event)"
       @add-task="$emit('add-task', $event)"
     />
+
+    <CalendarioDiaEventosDialog
+      v-model:open="dayEventsOpen"
+      v-model:date="selectedDate"
+      @add-event="$emit('add-event', $event)"
+      @add-task="$emit('add-task')"
+    />
+
+    <CalendarioItemDetalleDialog v-model:open="detalleOpen" v-model:detalle="detalle" />
   </div>
 </template>

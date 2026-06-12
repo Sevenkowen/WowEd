@@ -21,7 +21,7 @@ import {
   sidebarTaskMetaClass,
   taskDisplayTitle,
 } from '@/utils/calendarioTaskStyles'
-import { CALENDAR_PAST_DATE_MESSAGE, isDateBeforeToday } from '@/utils/calendarioDates'
+import { isCalendarSlotCreateAllowed } from '@/utils/calendarioDates'
 
 defineOptions({ name: 'CalendarioDiaEventosDialog' })
 
@@ -43,7 +43,9 @@ const { tareasDelDia } = useCalendarioEscolarTasks()
 
 const events = computed(() => eventosDelDia(date.value))
 const tasks = computed(() => tareasDelDia(date.value))
-const canCreate = computed(() => !date.value || !isDateBeforeToday(date.value))
+const canCreate = computed(
+  () => !date.value || isCalendarSlotCreateAllowed(date.value, props.slotTime),
+)
 
 const isEmpty = computed(() => events.value.length === 0 && tasks.value.length === 0)
 
@@ -125,7 +127,7 @@ function onAddTask() {
                   </DialogTitle>
                   <p class="mt-1 text-sm capitalize text-gray-600 dark:text-gray-400">
                     <time v-if="date" :datetime="date">{{ dateLabel }}</time>
-                    <span v-if="slotTime" class="mt-0.5 block text-xs font-medium normal-case text-[#1a73e8] dark:text-[#8ab4f8]">
+                    <span v-if="slotTime" class="mt-0.5 block text-xs font-medium normal-case text-indigo-600 dark:text-indigo-400">
                       Franja seleccionada: {{ slotTime }}
                     </span>
                   </p>
@@ -210,14 +212,9 @@ function onAddTask() {
               </div>
 
               <div
+                v-if="canCreate"
                 class="shrink-0 space-y-2 border-t border-gray-200 bg-gray-50 px-5 py-4 dark:border-white/10 dark:bg-gray-950/50"
               >
-                <p
-                  v-if="!canCreate"
-                  class="rounded-lg bg-amber-50 px-3 py-2 text-center text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
-                >
-                  {{ CALENDAR_PAST_DATE_MESSAGE }}
-                </p>
                 <button
                   type="button"
                   :disabled="!canCreate"

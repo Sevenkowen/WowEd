@@ -78,3 +78,40 @@ html.dark,
 .scrollbar-sidebar::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Scroll del calendario: barra fuera del borde de la grilla (estilo Google Calendar). */
+.gcal-grid-with-gutter {
+  display: flex;
+  min-width: 0;
+  --gcal-scrollbar-gutter: 10px;
+}
+
+.gcal-scrollbar-gutter {
+  width: var(--gcal-scrollbar-gutter);
+  flex-shrink: 0;
+}
+
+.gcal-grid-with-gutter .gcal-scroll-outside {
+  width: calc(100% + var(--gcal-scrollbar-gutter));
+  max-width: calc(100% + var(--gcal-scrollbar-gutter));
+  margin-right: calc(-1 * var(--gcal-scrollbar-gutter));
+  padding-right: var(--gcal-scrollbar-gutter);
+}
+
+.gcal-scroll-viewport {
+  min-height: 0;
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.gcal-scroll-outside {
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  box-sizing: border-box;
+  width: calc(100% + var(--scrollbar-size));
+  max-width: calc(100% + var(--scrollbar-size));
+  margin-right: calc(-1 * var(--scrollbar-size));
+  padding-right: var(--scrollbar-size);
+}

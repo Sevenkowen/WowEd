@@ -112,21 +112,21 @@ function viewLinkedEvent() {
           <button
             v-if="isEvent && eventDetail && isUserEvent(eventDetail.id)"
             type="button"
-            class="flex size-9 items-center justify-center rounded-full text-[#70757a] hover:bg-[#f1f3f4] dark:text-gray-400 dark:hover:bg-white/10"
+            class="flex size-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/10"
             aria-label="Eliminar evento"
           >
             <TrashIcon class="size-5" aria-hidden="true" />
           </button>
           <button
             type="button"
-            class="flex size-9 items-center justify-center rounded-full text-[#70757a] hover:bg-[#f1f3f4] dark:text-gray-400 dark:hover:bg-white/10"
+            class="flex size-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/10"
             aria-label="Más opciones"
           >
             <EllipsisVerticalIcon class="size-5" aria-hidden="true" />
           </button>
           <button
             type="button"
-            class="flex size-9 items-center justify-center rounded-full text-[#70757a] hover:bg-[#f1f3f4] dark:text-gray-400 dark:hover:bg-white/10"
+            class="flex size-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/10"
             @click="close"
           >
             <span class="sr-only">Cerrar</span>
@@ -150,7 +150,7 @@ function viewLinkedEvent() {
               <h2 class="text-xl font-normal leading-snug text-[#3c4043] dark:text-white">
                 {{ title }}
               </h2>
-              <p class="mt-1 text-sm capitalize text-[#70757a] dark:text-gray-400">
+              <p class="mt-1 text-sm capitalize text-gray-500 dark:text-gray-400">
                 {{ dateLabel }}
               </p>
             </div>
@@ -159,50 +159,50 @@ function viewLinkedEvent() {
           <ul class="mt-6 space-y-4 text-sm text-[#3c4043] dark:text-gray-200">
             <template v-if="eventDetail">
               <li class="flex items-start gap-4">
-                <Bars3BottomLeftIcon class="mt-0.5 size-5 shrink-0 text-[#70757a]" aria-hidden="true" />
+                <Bars3BottomLeftIcon class="mt-0.5 size-5 shrink-0 text-gray-500" aria-hidden="true" />
                 <span>{{ eventDetail.description || 'Sin descripción' }}</span>
               </li>
               <li class="flex items-start gap-4">
-                <CalendarIcon class="mt-0.5 size-5 shrink-0 text-[#70757a]" aria-hidden="true" />
+                <CalendarIcon class="mt-0.5 size-5 shrink-0 text-gray-500" aria-hidden="true" />
                 <div>
                   <p>{{ eventDetail.time }}</p>
-                  <p class="mt-0.5 text-[#70757a] dark:text-gray-400">
+                  <p class="mt-0.5 text-gray-500 dark:text-gray-400">
                     {{ eventDetail.eventType || 'Calendario escolar' }}
                   </p>
                 </div>
               </li>
               <li class="flex items-start gap-4">
-                <LockClosedIcon class="mt-0.5 size-5 shrink-0 text-[#70757a]" aria-hidden="true" />
+                <LockClosedIcon class="mt-0.5 size-5 shrink-0 text-gray-500" aria-hidden="true" />
                 <span>{{ isUserEvent(eventDetail.id) ? 'Privado' : 'Público' }}</span>
               </li>
             </template>
 
             <template v-else-if="taskDetail">
               <li class="flex items-start gap-4">
-                <Bars3BottomLeftIcon class="mt-0.5 size-5 shrink-0 text-[#70757a]" aria-hidden="true" />
+                <Bars3BottomLeftIcon class="mt-0.5 size-5 shrink-0 text-gray-500" aria-hidden="true" />
                 <span>{{ taskDetail.description || 'Sin descripción' }}</span>
               </li>
               <li class="flex items-start gap-4">
-                <CalendarIcon class="mt-0.5 size-5 shrink-0 text-[#70757a]" aria-hidden="true" />
+                <CalendarIcon class="mt-0.5 size-5 shrink-0 text-gray-500" aria-hidden="true" />
                 <div>
                   <p>{{ taskTipoOf(taskDetail) }} · {{ taskCuadranteOf(taskDetail) }}</p>
-                  <p v-if="taskDetail.time" class="mt-0.5 text-[#70757a] dark:text-gray-400">
+                  <p v-if="taskDetail.time" class="mt-0.5 text-gray-500 dark:text-gray-400">
                     {{ taskDetail.time }}
                   </p>
                 </div>
               </li>
               <li v-if="taskDetail.eventId && eventNameById(taskDetail.eventId)" class="flex items-start gap-4">
-                <CalendarIcon class="mt-0.5 size-5 shrink-0 text-[#70757a]" aria-hidden="true" />
+                <CalendarIcon class="mt-0.5 size-5 shrink-0 text-gray-500" aria-hidden="true" />
                 <button
                   type="button"
-                  class="text-left text-[#1a73e8] hover:underline dark:text-[#8ab4f8]"
+                  class="text-left text-indigo-600 hover:underline dark:text-indigo-400"
                   @click="viewLinkedEvent"
                 >
                   {{ eventNameById(taskDetail.eventId) }}
                 </button>
               </li>
               <li class="flex items-start gap-4">
-                <LockClosedIcon class="mt-0.5 size-5 shrink-0 text-[#70757a]" aria-hidden="true" />
+                <LockClosedIcon class="mt-0.5 size-5 shrink-0 text-gray-500" aria-hidden="true" />
                 <span>Privado</span>
               </li>
             </template>

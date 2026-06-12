@@ -77,20 +77,20 @@ watch(open, (v) => {
         ref="panelRef"
         role="dialog"
         aria-label="Actividades del día"
-        class="fixed z-[61] overflow-hidden rounded-xl bg-[#f8f9fa] shadow-lg ring-1 ring-black/10 dark:bg-[#292a2d] dark:ring-white/10"
+        class="fixed z-[61] overflow-hidden rounded-xl bg-gray-50 shadow-lg ring-1 ring-black/10 dark:bg-gray-800 dark:ring-white/10"
         :style="panelStyle"
         @click.stop
       >
         <div class="relative px-4 pt-3 pb-2">
           <button
             type="button"
-            class="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full text-[#70757a] hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/10"
+            class="absolute top-2 right-2 flex size-7 items-center justify-center rounded-full text-gray-500 hover:bg-black/5 dark:text-gray-400 dark:hover:bg-white/10"
             @click="close"
           >
             <span class="sr-only">Cerrar</span>
             <XMarkIcon class="size-4" aria-hidden="true" />
           </button>
-          <p class="text-[11px] font-medium tracking-wide text-[#70757a] uppercase dark:text-gray-400">
+          <p class="text-[11px] font-medium tracking-wide text-gray-500 uppercase dark:text-gray-400">
             {{ weekdayShort }}
           </p>
           <p class="text-2xl font-normal leading-none text-[#3c4043] dark:text-white">{{ dayNum }}</p>

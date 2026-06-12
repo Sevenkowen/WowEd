@@ -78,6 +78,15 @@ class ResizeTaskBody(BaseModel):
 
 class PatchTaskBody(BaseModel):
     completed: bool | None = None
+    cuadrante: str | None = None
+    title: str | None = None
+    description: str | None = None
+    date: str | None = None
+    tipo: str | None = None
+    time: str | None = None
+    end_time: str | None = None
+    all_day: bool | None = None
+    event_id: str | None = None
 
 
 class EventsByDateResponse(BaseModel):

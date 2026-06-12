@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   Dialog,
@@ -11,13 +11,15 @@ import {
   TransitionChild,
   TransitionRoot,
 } from '@headlessui/vue'
-import { Bars3Icon, BellIcon, XMarkIcon } from '@heroicons/vue/24/outline'
+import { Bars3Icon, BellIcon, ChevronDoubleLeftIcon, ChevronDoubleRightIcon, XMarkIcon } from '@heroicons/vue/24/outline'
 import { ChevronDownIcon } from '@heroicons/vue/20/solid'
 import SidebarNavigation from '@/components/SidebarNavigation.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
+import { useSidebarCollapsed } from '@/composables/useSidebarCollapsed'
 
 const route = useRoute()
 const sidebarOpen = ref(false)
+const { collapsed: sidebarCollapsed, toggle: toggleSidebar } = useSidebarCollapsed()
 
 watch(
   () => route.path,
@@ -30,6 +32,8 @@ const userNavigation = [
   { name: 'Tu perfil', href: '#' },
   { name: 'Cerrar sesión', href: '#' },
 ]
+
+const isFlushContent = computed(() => Boolean(route.meta.flushContent))
 </script>
 
 <template>
@@ -102,12 +106,20 @@ const userNavigation = [
       </Dialog>
     </TransitionRoot>
 
-    <div class="hidden bg-gray-900 lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
+    <div
+      class="hidden bg-gray-900 transition-[width] duration-200 ease-in-out lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:flex-col"
+      :class="sidebarCollapsed ? 'lg:w-[4.5rem]' : 'lg:w-72'"
+    >
       <div
-        class="scrollbar-sidebar flex grow flex-col gap-y-5 overflow-y-auto border-r border-gray-200 bg-white px-6 pb-4 dark:border-white/10 dark:bg-black/10"
+        class="scrollbar-sidebar flex grow flex-col overflow-y-auto border-r border-gray-200 bg-white pb-4 dark:border-white/10 dark:bg-black/10"
+        :class="sidebarCollapsed ? 'gap-y-4 px-2' : 'gap-y-5 px-6'"
       >
-        <div class="flex h-16 shrink-0 items-center">
+        <div
+          class="flex h-16 shrink-0 items-center"
+          :class="sidebarCollapsed ? 'justify-center' : ''"
+        >
           <div
+            v-if="!sidebarCollapsed"
             class="rounded-lg bg-slate-950 px-3 py-2 shadow-inner ring-1 ring-black/20 dark:bg-transparent dark:px-0 dark:py-0 dark:shadow-none dark:ring-0"
           >
             <img
@@ -120,12 +132,38 @@ const userNavigation = [
               decoding="async"
             />
           </div>
+          <img
+            v-else
+            src="/wowed-logo.png"
+            alt="WowEd"
+            class="h-8 w-8 object-contain"
+            width="32"
+            height="32"
+            loading="lazy"
+            decoding="async"
+          />
         </div>
-        <SidebarNavigation />
+        <SidebarNavigation :collapsed="sidebarCollapsed" />
+        <div class="mt-auto shrink-0 border-t border-gray-200 pt-3 dark:border-white/10">
+          <button
+            type="button"
+            class="flex w-full items-center rounded-lg p-2 text-gray-500 hover:bg-gray-50 hover:text-indigo-600 dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-white"
+            :class="sidebarCollapsed ? 'justify-center' : 'gap-x-3'"
+            :title="sidebarCollapsed ? 'Expandir menú' : 'Contraer menú'"
+            @click="toggleSidebar"
+          >
+            <ChevronDoubleLeftIcon v-if="!sidebarCollapsed" class="size-5 shrink-0" aria-hidden="true" />
+            <ChevronDoubleRightIcon v-else class="size-5 shrink-0" aria-hidden="true" />
+            <span v-if="!sidebarCollapsed" class="text-sm font-medium">Contraer menú</span>
+          </button>
+        </div>
       </div>
     </div>
 
-    <div class="flex h-full min-h-0 flex-col lg:pl-72">
+    <div
+      class="flex h-full min-h-0 flex-col transition-[padding] duration-200 ease-in-out"
+      :class="sidebarCollapsed ? 'lg:pl-[4.5rem]' : 'lg:pl-72'"
+    >
       <div
         class="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-xs sm:gap-x-6 sm:px-6 lg:px-8 dark:border-white/10 dark:bg-gray-900 dark:shadow-none"
       >
@@ -195,8 +233,14 @@ const userNavigation = [
         </div>
       </div>
 
-      <main class="flex min-h-0 flex-1 flex-col py-8 sm:py-10">
-        <div class="flex min-h-0 w-full flex-1 flex-col px-4 sm:px-8 lg:px-10">
+      <main
+        class="flex min-h-0 flex-1 flex-col"
+        :class="isFlushContent ? 'overflow-hidden py-0' : 'py-8 sm:py-10'"
+      >
+        <div
+          class="flex min-h-0 w-full flex-1 flex-col"
+          :class="isFlushContent ? 'overflow-hidden' : 'px-4 sm:px-8 lg:px-10'"
+        >
           <RouterView />
         </div>
       </main>

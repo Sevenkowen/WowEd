@@ -12,7 +12,11 @@ import {
   minutesFromEvent,
   parseTimeToMinutes,
 } from '@/utils/calendarioEventTime'
-import { isCalendarModifyAllowed, isDateBeforeToday } from '@/utils/calendarioDates'
+import {
+  isCalendarModifyAllowed,
+  isCalendarSlotCreateAllowed,
+  isDateBeforeToday,
+} from '@/utils/calendarioDates'
 import type { CalRecurrencePreset } from '@/utils/calendarioRecurrence'
 import { expandRecurrenceDates } from '@/utils/calendarioRecurrence'
 
@@ -231,7 +235,14 @@ export function useCalendarioEscolarEvents() {
   }
 
   function addEvent(input: NuevoCalendarioEvento): CalEvent | null {
-    if (isDateBeforeToday(input.date)) return null
+    if (
+      !isCalendarSlotCreateAllowed(
+        input.date,
+        input.allDay ? null : input.startTime,
+      )
+    ) {
+      return null
+    }
     const event = buildEventFromInput(input, input.date)
     if (!event) return null
 
@@ -265,7 +276,7 @@ export function useCalendarioEscolarEvents() {
   function moveEvent(eventId: string, newDate: string, newStartTime: string): boolean {
     if (isDateBeforeToday(newDate)) return false
     const found = findUserEvent(eventId)
-    if (found && !isCalendarModifyAllowed(found.date, newDate)) return false
+    if (found && !isCalendarModifyAllowed(found.date, newDate, newStartTime)) return false
     if (found) {
       const moved = buildMovedEvent(found.event, newDate, newStartTime)
       let next = removeFromDateMap(userEventsByDate.value, found.date, found.index)
@@ -281,7 +292,7 @@ export function useCalendarioEscolarEvents() {
     const demoEvent = findDemoEvent(eventId)
     if (!demoEvent) return false
     const demoDate = demoEvent.datetime.slice(0, 10)
-    if (!isCalendarModifyAllowed(demoDate, newDate)) return false
+    if (!isCalendarModifyAllowed(demoDate, newDate, newStartTime)) return false
 
     const copy = buildMovedEvent(demoEvent, newDate, newStartTime, String(nextId++))
     userEventsByDate.value = {

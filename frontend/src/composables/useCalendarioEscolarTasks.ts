@@ -9,7 +9,11 @@ import {
   type CalTaskTipo,
 } from '@/data/calendarioTareaOptions'
 import { parseTimeToMinutes, formatTimeLabel } from '@/utils/calendarioEventTime'
-import { isCalendarModifyAllowed, isDateBeforeToday } from '@/utils/calendarioDates'
+import {
+  isCalendarModifyAllowed,
+  isCalendarSlotCreateAllowed,
+  isDateBeforeToday,
+} from '@/utils/calendarioDates'
 import type { CalRecurrencePreset } from '@/utils/calendarioRecurrence'
 import { expandRecurrenceDates } from '@/utils/calendarioRecurrence'
 
@@ -27,6 +31,30 @@ export interface NuevaCalendarioTarea {
   endTime?: string | null
   allDay?: boolean
   recurrence?: CalRecurrencePreset
+}
+
+export interface UpdateCalendarioTarea {
+  title?: string
+  description?: string
+  date?: string
+  tipo?: CalTaskTipo
+  cuadrante?: CalTaskCuadrante
+  eventId?: string | null
+  time?: string | null
+  endTime?: string | null
+  allDay?: boolean
+  completed?: boolean
+}
+
+function findTaskEntry(
+  map: Record<string, CalTask[]>,
+  taskId: string,
+): { date: string; index: number; task: CalTask } | null {
+  for (const [date, tasks] of Object.entries(map)) {
+    const index = tasks.findIndex((t) => t.id === taskId)
+    if (index >= 0) return { date, index, task: tasks[index] }
+  }
+  return null
 }
 
 const userTasksByDate = ref<Record<string, CalTask[]>>(loadUserTasks())
@@ -108,7 +136,13 @@ export function useCalendarioEscolarTasks() {
 
   function addTask(input: NuevaCalendarioTarea): CalTask | null {
     const title = input.title.trim()
-    if (!title || !input.date || isDateBeforeToday(input.date)) return null
+    if (
+      !title ||
+      !input.date ||
+      !isCalendarSlotCreateAllowed(input.date, input.allDay ? null : input.time)
+    ) {
+      return null
+    }
 
     const allDay = input.allDay === true
     const time = !allDay && input.time?.trim() ? input.time.trim() : undefined
@@ -168,7 +202,7 @@ export function useCalendarioEscolarTasks() {
       }
     }
     if (!task || foundIndex < 0) return false
-    if (!isCalendarModifyAllowed(foundDate, newDate)) return false
+    if (!isCalendarModifyAllowed(foundDate, newDate, newTime)) return false
 
     let eventId = task.eventId ?? null
     if (eventId && newDate !== foundDate) {
@@ -231,6 +265,110 @@ export function useCalendarioEscolarTasks() {
     }
   }
 
+  function setCompletada(taskId: string, completed: boolean): void {
+    for (const [date, tasks] of Object.entries(userTasksByDate.value)) {
+      const idx = tasks.findIndex((t) => t.id === taskId)
+      if (idx < 0) continue
+      if (!!tasks[idx].completed === completed) return
+      const next = [...tasks]
+      next[idx] = { ...next[idx], completed }
+      userTasksByDate.value = { ...userTasksByDate.value, [date]: next }
+      persistUserTasks()
+      return
+    }
+  }
+
+  function moveTaskCuadrante(taskId: string, cuadrante: CalTaskCuadrante): boolean {
+    for (const [date, tasks] of Object.entries(userTasksByDate.value)) {
+      const idx = tasks.findIndex((t) => t.id === taskId)
+      if (idx < 0) continue
+      const next = [...tasks]
+      next[idx] = { ...next[idx], cuadrante }
+      userTasksByDate.value = { ...userTasksByDate.value, [date]: next }
+      persistUserTasks()
+      return true
+    }
+    return false
+  }
+
+  function updateTask(taskId: string, patch: UpdateCalendarioTarea): CalTask | null {
+    const entry = findTaskEntry(userTasksByDate.value, taskId)
+    if (!entry) return null
+
+    const { date: oldDate, task } = entry
+    const newDate = patch.date ?? oldDate
+    const allDay = patch.allDay ?? task.allDay ?? false
+    const timeRaw = patch.time !== undefined ? patch.time : task.time ?? null
+    const startTime = allDay ? null : timeRaw?.trim() || null
+
+    if (!isCalendarModifyAllowed(oldDate, newDate, startTime)) return null
+    if (!isCalendarSlotCreateAllowed(newDate, allDay ? null : startTime)) return null
+
+    const title = (patch.title !== undefined ? patch.title : task.title).trim()
+    if (!title) return null
+
+    let endTime = patch.endTime !== undefined ? patch.endTime : task.endTime
+    if (startTime && !endTime) {
+      const endMin = parseTimeToMinutes(startTime) + 30
+      endTime = formatTimeLabel(Math.floor(endMin / 60) % 24, endMin % 60)
+    }
+    if (startTime && endTime && parseTimeToMinutes(endTime) <= parseTimeToMinutes(startTime)) {
+      const endMin = parseTimeToMinutes(startTime) + 30
+      endTime = formatTimeLabel(Math.floor(endMin / 60) % 24, endMin % 60)
+    }
+
+    let eventId = patch.eventId !== undefined ? patch.eventId : (task.eventId ?? null)
+    if (eventId && newDate !== oldDate) eventId = null
+
+    const updated: CalTask = {
+      ...task,
+      title,
+      description:
+        patch.description !== undefined
+          ? patch.description.trim() || undefined
+          : task.description,
+      tipo: patch.tipo ?? task.tipo,
+      cuadrante: patch.cuadrante ?? task.cuadrante,
+      completed: patch.completed ?? task.completed,
+      date: newDate,
+      eventId,
+      time: startTime || undefined,
+      endTime: allDay ? undefined : endTime || undefined,
+      allDay: allDay || undefined,
+    }
+
+    const next = { ...userTasksByDate.value }
+    if (newDate === oldDate) {
+      const list = [...(next[oldDate] ?? [])]
+      list[entry.index] = updated
+      next[oldDate] = list
+    } else {
+      const oldList = [...(next[oldDate] ?? [])]
+      oldList.splice(entry.index, 1)
+      if (oldList.length > 0) next[oldDate] = oldList
+      else delete next[oldDate]
+      next[newDate] = [...(next[newDate] ?? []), updated]
+    }
+    userTasksByDate.value = next
+    persistUserTasks()
+    return updated
+  }
+
+  function deleteTask(taskId: string): boolean {
+    const entry = findTaskEntry(userTasksByDate.value, taskId)
+    if (!entry) return false
+    if (!isCalendarModifyAllowed(entry.date)) return false
+
+    const next = { ...userTasksByDate.value }
+    const list = [...(next[entry.date] ?? [])]
+    list.splice(entry.index, 1)
+    if (list.length > 0) next[entry.date] = list
+    else delete next[entry.date]
+    userTasksByDate.value = next
+    persistUserTasks()
+    return true
+  }
+
   return {
     porFecha,
     todasLasTareas,
@@ -241,5 +379,9 @@ export function useCalendarioEscolarTasks() {
     moveTask,
     resizeTask,
     toggleCompletada,
+    setCompletada,
+    moveTaskCuadrante,
+    updateTask,
+    deleteTask,
   }
 }

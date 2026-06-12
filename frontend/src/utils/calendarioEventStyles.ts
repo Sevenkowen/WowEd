@@ -60,7 +60,7 @@ function styleForEvent(event: CalEvent): EventTypeStyle {
 }
 
 export function timedEventResizeHandleClass(): string {
-  return 'absolute inset-x-0 bottom-0 z-10 h-2 cursor-ns-resize touch-none'
+  return 'absolute inset-x-0 bottom-0 z-10 h-1.5 cursor-ns-resize touch-none'
 }
 
 export function timedEventDragGhostClass(): string {
@@ -68,12 +68,12 @@ export function timedEventDragGhostClass(): string {
 }
 
 export function timedEventDragPreviewClass(): string {
-  return 'pointer-events-none shadow-md ring-2 ring-[#1a73e8]/35'
+  return 'pointer-events-none shadow-md ring-2 ring-indigo-500/35'
 }
 
 /** Bloque en vista día/semana (estilo Google Calendar) */
 export function timedEventBlockClass(event: CalEvent): string {
-  return `${styleForEvent(event).bubble} absolute inset-x-1 top-1 bottom-1 flex flex-col overflow-hidden rounded px-2 py-1 text-left shadow-sm`
+  return `${styleForEvent(event).bubble} absolute inset-x-1 inset-y-px flex flex-col overflow-hidden rounded px-1.5 py-px text-left shadow-sm`
 }
 
 export function timedEventTimeClass(): string {

@@ -27,7 +27,7 @@ defineEmits<{
 
 <template>
   <header
-    class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-white px-2 py-2 sm:gap-3 sm:px-4 dark:bg-[#202124]"
+    class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b bg-white px-2 py-2.5 sm:gap-3 sm:px-4 sm:py-3 dark:bg-gray-900"
     :class="gcalBorder"
   >
     <div class="flex min-w-0 flex-1 items-center gap-0.5 sm:gap-1">
@@ -35,11 +35,11 @@ defineEmits<{
         <button type="button" :class="gcalHoyBtn" @click="$emit('today')">Hoy</button>
         <button type="button" :class="gcalNavIconBtn" @click="$emit('prev')">
           <span class="sr-only">Anterior</span>
-          <ChevronLeftIcon class="size-5" aria-hidden="true" />
+          <ChevronLeftIcon class="size-[1.125rem] shrink-0" aria-hidden="true" />
         </button>
         <button type="button" :class="gcalNavIconBtn" @click="$emit('next')">
           <span class="sr-only">Siguiente</span>
-          <ChevronRightIcon class="size-5" aria-hidden="true" />
+          <ChevronRightIcon class="size-[1.125rem] shrink-0" aria-hidden="true" />
         </button>
       </template>
       <div :class="['min-w-0', hideDateNav ? '' : 'pl-1 sm:pl-2']">
@@ -47,7 +47,7 @@ defineEmits<{
           <time v-if="datetime" :datetime="datetime">{{ title }}</time>
           <span v-else>{{ title }}</span>
         </h1>
-        <p v-if="subtitle" class="truncate text-xs capitalize text-[#70757a] dark:text-gray-400">
+        <p v-if="subtitle" class="truncate text-xs capitalize text-gray-500 dark:text-gray-400">
           {{ subtitle }}
         </p>
       </div>

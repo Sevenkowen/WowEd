@@ -34,7 +34,7 @@ copy .env.example .env          # VITE_API_URL, VITE_USE_API
 npm run dev
 ```
 
-App: http://localhost:5173 — API: http://127.0.0.1:8000/docs
+App: http://localhost:5173 — API: http://127.0.0.1:8000/api/docs
 
 ## Producción (Docker)
 

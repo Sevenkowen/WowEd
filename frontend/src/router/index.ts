@@ -19,7 +19,7 @@ const mainChildren: RouteRecordRaw[] = [
     path: 'planificador-anual',
     name: 'planificador-anual',
     component: () => import('@/pages/PlanificacionAnualPage.vue'),
-    meta: { title: 'Calendario' },
+    meta: { title: 'Calendario', flushContent: true },
   },
   {
     path: 'objetivos',

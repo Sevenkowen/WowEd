@@ -36,6 +36,8 @@ import {
 import { parseTimeToMinutes, formatTimeLabel } from '@/utils/calendarioEventTime'
 import {
   CALENDAR_PAST_DATE_MESSAGE,
+  CALENDAR_PAST_SLOT_MESSAGE,
+  isCalendarSlotCreateAllowed,
   isDateBeforeToday,
   todayYmd,
 } from '@/utils/calendarioDates'
@@ -47,10 +49,30 @@ import {
 
 defineOptions({ name: 'PlanificacionAnualPage' })
 
-const schoolYear = ref(2026)
-const selectedDay = ref<string | null>('2026-05-15')
-const calendarioDisplayView = ref<CalendarioDisplayView>('mes')
-const calendarioContentMode = ref<CalendarioContentMode>('calendario')
+const CALENDARIO_CONTENT_MODE_KEY = 'wowed-calendario-content-mode'
+
+function readStoredContentMode(): CalendarioContentMode {
+  try {
+    const stored = localStorage.getItem(CALENDARIO_CONTENT_MODE_KEY)
+    if (stored === 'tareas' || stored === 'calendario') return stored
+  } catch {
+    /* ignore */
+  }
+  return 'calendario'
+}
+
+const schoolYear = ref(new Date().getFullYear())
+const selectedDay = ref<string | null>(todayYmd())
+const calendarioDisplayView = ref<CalendarioDisplayView>('semana')
+const calendarioContentMode = ref<CalendarioContentMode>(readStoredContentMode())
+
+watch(calendarioContentMode, (mode) => {
+  try {
+    localStorage.setItem(CALENDARIO_CONTENT_MODE_KEY, mode)
+  } catch {
+    /* ignore */
+  }
+})
 
 watch(calendarioDisplayView, () => {
   if (calendarioContentMode.value === 'tareas') {
@@ -124,12 +146,7 @@ function resolveCreateDate(date?: string | null): string {
 
 function openAddEvent(date?: string | null, startTime?: string | null) {
   const requested = date ?? selectedDay.value ?? minCreateDate.value
-  if (isDateBeforeToday(requested)) {
-    addEventDate.value = minCreateDate.value
-    addEventFormError.value = CALENDAR_PAST_DATE_MESSAGE
-    addEventOpen.value = true
-    return
-  }
+  if (!isCalendarSlotCreateAllowed(requested, startTime)) return
   addEventDate.value = resolveCreateDate(date)
   addEventTitle.value = ''
   addEventDescription.value = ''
@@ -169,8 +186,15 @@ async function saveAddEvent() {
     addEventFormError.value = 'La hora de fin debe ser posterior a la hora de inicio.'
     return
   }
-  if (isDateBeforeToday(addEventDate.value)) {
-    addEventFormError.value = CALENDAR_PAST_DATE_MESSAGE
+  if (
+    !isCalendarSlotCreateAllowed(
+      addEventDate.value,
+      addEventAllDay.value ? null : addEventStartTime.value,
+    )
+  ) {
+    addEventFormError.value = addEventAllDay.value
+      ? CALENDAR_PAST_DATE_MESSAGE
+      : CALENDAR_PAST_SLOT_MESSAGE
     return
   }
   const payload = {
@@ -272,12 +296,7 @@ watch(addTaskDate, () => {
 
 function openAddTask(date?: string | null, startTime?: string | null) {
   const requested = date ?? selectedDay.value ?? minCreateDate.value
-  if (isDateBeforeToday(requested)) {
-    addTaskDate.value = minCreateDate.value
-    addTaskFormError.value = CALENDAR_PAST_DATE_MESSAGE
-    addTaskOpen.value = true
-    return
-  }
+  if (!isCalendarSlotCreateAllowed(requested, startTime)) return
   addTaskDate.value = resolveCreateDate(date)
   addTaskTitle.value = ''
   addTaskDescription.value = ''
@@ -322,8 +341,14 @@ async function saveAddTask() {
     addTaskFormError.value = 'La hora de fin debe ser posterior a la hora de inicio.'
     return
   }
-  if (isDateBeforeToday(addTaskDate.value)) {
-    addTaskFormError.value = CALENDAR_PAST_DATE_MESSAGE
+  if (
+    !isCalendarSlotCreateAllowed(
+      addTaskDate.value,
+      scheduled && !addTaskAllDay.value ? addTaskTime.value : null,
+    )
+  ) {
+    addTaskFormError.value =
+      scheduled && !addTaskAllDay.value ? CALENDAR_PAST_SLOT_MESSAGE : CALENDAR_PAST_DATE_MESSAGE
     return
   }
   const payload = {
@@ -365,8 +390,8 @@ async function refreshCalendario(): Promise<void> {
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-    <div class="flex min-h-0 flex-1 flex-col">
+  <div class="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
         <CalendarioEscolarTareas
           v-if="calendarioContentMode === 'tareas'"
           class="min-h-0 flex-1"
@@ -423,25 +448,25 @@ async function refreshCalendario(): Promise<void> {
 
       <div
         v-if="calendarioContentMode === 'calendario'"
-        class="flex shrink-0 flex-col gap-4 border-t pt-3 sm:flex-row sm:items-center sm:justify-between dark:border-white/10"
+        class="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t px-2 py-1.5 sm:px-3 dark:border-white/10"
         :class="gcalBorder"
       >
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
           <span
             v-for="item in leyenda"
             :key="item.label"
-            class="inline-flex items-center gap-2 text-xs font-medium text-gray-600 dark:text-gray-400"
+            class="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600 dark:text-gray-400"
           >
-            <span class="size-2.5 rounded-full" :class="item.class" aria-hidden="true"></span>
+            <span class="size-2 rounded-full" :class="item.class" aria-hidden="true"></span>
             {{ item.label }}
           </span>
         </div>
         <button
           type="button"
-          class="inline-flex items-center justify-center gap-2 self-start rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-white/5"
+          class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-white/5"
         >
-          <ArrowDownTrayIcon class="size-4 text-gray-500 dark:text-gray-400" aria-hidden="true" />
-          Exportar calendario
+          <ArrowDownTrayIcon class="size-3.5 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+          Exportar
         </button>
       </div>
   </div>

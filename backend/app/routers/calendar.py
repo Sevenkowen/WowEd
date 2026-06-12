@@ -239,15 +239,62 @@ def move_task(task_id: str, body: MoveTaskBody, db: Session = Depends(get_db)):
 
 @router.patch("/tasks/{task_id}", response_model=CalTaskDto)
 def patch_task(task_id: str, body: PatchTaskBody, db: Session = Depends(get_db)):
+    from datetime import date as date_cls
+
     task = db.get(Task, uuid.UUID(task_id))
     if not task:
         raise HTTPException(404, "Tarea no encontrada")
+    if body.date is not None:
+        _reject_past_modify(task.due_date, body.date)
+        task.due_date = date_cls.fromisoformat(body.date)
+    if body.title is not None:
+        title = body.title.strip()
+        if not title:
+            raise HTTPException(400, "El título no puede estar vacío")
+        task.title = title
+    if body.description is not None:
+        task.description = body.description.strip() or None
+    if body.tipo is not None:
+        task.tipo = body.tipo
+    if body.cuadrante is not None:
+        task.cuadrante = body.cuadrante
     if body.completed is not None:
         task.completed = body.completed
         task.status = "done" if body.completed else "pending"
+    if body.all_day is not None:
+        task.all_day = body.all_day
+        if body.all_day:
+            task.start_time = None
+            task.end_time = None
+    if body.time is not None or body.end_time is not None:
+        if body.time:
+            task.start_time = parse_hhmm(body.time)
+        elif body.time == "":
+            task.start_time = None
+        if body.end_time:
+            task.end_time = parse_hhmm(body.end_time)
+        elif body.end_time == "":
+            task.end_time = None
+        if task.start_time and not task.end_time:
+            task.end_time = (
+                datetime.combine(task.due_date or datetime.today().date(), task.start_time)
+                + timedelta(minutes=30)
+            ).time()
+    if body.event_id is not None:
+        task.linked_event_id = uuid.UUID(body.event_id) if body.event_id else None
     db.commit()
     db.refresh(task)
     return task_to_dto(task)
+
+
+@router.delete("/tasks/{task_id}", status_code=204)
+def delete_task(task_id: str, db: Session = Depends(get_db)):
+    task = db.get(Task, uuid.UUID(task_id))
+    if not task:
+        raise HTTPException(404, "Tarea no encontrada")
+    _reject_past_modify(task.due_date)
+    db.delete(task)
+    db.commit()
 
 
 @router.patch("/tasks/{task_id}/resize", response_model=CalTaskDto)

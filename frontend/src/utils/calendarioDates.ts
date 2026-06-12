@@ -1,3 +1,5 @@
+import { parseTimeToMinutes } from '@/utils/calendarioEventTime'
+
 export type CalendarioDisplayView = 'dia' | 'semana' | 'mes' | 'anio'
 
 /** Modo del panel derecho del toolbar (calendario vs tareas). */
@@ -33,13 +35,13 @@ export function parseYmd(ymd: string): Date {
 }
 
 /** Fecha local de hoy en YYYY-MM-DD. */
-export function todayYmd(): string {
-  return formatYmd(new Date())
+export function todayYmd(now: Date = new Date()): string {
+  return formatYmd(now)
 }
 
 /** true si la fecha es estrictamente anterior a hoy (hora local). */
-export function isDateBeforeToday(ymd: string): boolean {
-  return ymd < todayYmd()
+export function isDateBeforeToday(ymd: string, now: Date = new Date()): boolean {
+  return ymd < todayYmd(now)
 }
 
 export const CALENDAR_PAST_DATE_MESSAGE =
@@ -48,9 +50,39 @@ export const CALENDAR_PAST_DATE_MESSAGE =
 export const CALENDAR_PAST_MODIFY_MESSAGE =
   'No podés mover ni cambiar la duración de eventos o tareas en fechas anteriores a hoy.'
 
-/** false si la fecha origen o destino es anterior a hoy. */
-export function isCalendarModifyAllowed(fromDate: string, toDate?: string): boolean {
+export const CALENDAR_PAST_SLOT_MESSAGE =
+  'No podés crear eventos o tareas en horarios que ya pasaron hoy.'
+
+/** true si la franja (inicio HH:mm) ya transcurrió hoy, o el día es anterior a hoy. */
+export function isSlotInPast(date: string, startTime: string, now: Date = new Date()): boolean {
+  if (isDateBeforeToday(date, now)) return true
+  if (date !== todayYmd(now)) return false
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+  // Bloquear en cuanto empezó la franja (p. ej. a las 7:05, 7:00 ya no es seleccionable).
+  return parseTimeToMinutes(startTime) <= nowMinutes
+}
+
+/** false si no se puede crear en esa fecha/franja (día pasado u hora ya transcurrida hoy). */
+export function isCalendarSlotCreateAllowed(
+  date: string,
+  startTime?: string | null,
+  now: Date = new Date(),
+): boolean {
+  if (isDateBeforeToday(date, now)) return false
+  if (date > todayYmd(now)) return true
+  if (!startTime) return true
+  return !isSlotInPast(date, startTime, now)
+}
+
+/** false si la fecha origen o destino es anterior a hoy, o el destino es una franja pasada hoy. */
+export function isCalendarModifyAllowed(
+  fromDate: string,
+  toDate?: string,
+  toStartTime?: string | null,
+): boolean {
   if (isDateBeforeToday(fromDate)) return false
-  if (toDate !== undefined && isDateBeforeToday(toDate)) return false
+  if (toDate === undefined) return true
+  if (isDateBeforeToday(toDate)) return false
+  if (toStartTime && !isCalendarSlotCreateAllowed(toDate, toStartTime)) return false
   return true
 }

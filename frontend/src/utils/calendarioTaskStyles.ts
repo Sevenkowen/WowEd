@@ -43,14 +43,14 @@ export function taskDisplayTime(task: CalTask): string | null {
 }
 
 const timedTaskBlockBase =
-  'absolute inset-x-1 top-1 bottom-1 flex flex-col overflow-hidden rounded px-2 py-1 text-left shadow-sm bg-[#8E24AA] text-white'
+  'absolute inset-x-1 inset-y-px flex flex-col overflow-hidden rounded px-1.5 py-px text-left shadow-sm bg-[#8E24AA] text-white'
 
 export function timedTaskBlockClass(): string {
   return timedTaskBlockBase
 }
 
 export function timedTaskResizeHandleClass(): string {
-  return 'absolute inset-x-0 bottom-0 z-10 h-2 cursor-ns-resize touch-none'
+  return 'absolute inset-x-0 bottom-0 z-10 h-1.5 cursor-ns-resize touch-none'
 }
 
 export function timedTaskDragGhostClass(): string {
@@ -58,7 +58,7 @@ export function timedTaskDragGhostClass(): string {
 }
 
 export function timedTaskDragPreviewClass(): string {
-  return 'pointer-events-none shadow-md ring-2 ring-[#1a73e8]/35'
+  return 'pointer-events-none shadow-md ring-2 ring-indigo-500/35'
 }
 
 export function timedTaskTimeClass(): string {
