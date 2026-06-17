@@ -84,6 +84,38 @@ const gridRef = ref<HTMLElement | null>(null)
 const scrollContainerRef = ref<HTMLElement | null>(null)
 const now = useCalendarClock()
 
+const todayStr = formatYmd(new Date())
+
+const focusDay = ref(
+  selectedDate.value ? parseYmd(selectedDate.value) : new Date(),
+)
+
+watch(
+  () => selectedDate.value,
+  (d) => {
+    if (!d) return
+    const parsed = parseYmd(d)
+    if (formatYmd(parsed) !== formatYmd(focusDay.value)) {
+      focusDay.value = parsed
+    }
+  },
+)
+
+watch(focusDay, () => {
+  const ymd = formatYmd(focusDay.value)
+  if (selectedDate.value !== ymd) selectedDate.value = ymd
+  const y = focusDay.value.getFullYear()
+  if (schoolYear.value !== y) schoolYear.value = y
+})
+
+const miniMonth = ref(new Date(focusDay.value.getFullYear(), focusDay.value.getMonth(), 1))
+
+watch(focusDay, (d) => {
+  if (d.getMonth() !== miniMonth.value.getMonth() || d.getFullYear() !== miniMonth.value.getFullYear()) {
+    miniMonth.value = new Date(d.getFullYear(), d.getMonth(), 1)
+  }
+})
+
 const dayYmd = computed(() => formatYmd(focusDay.value))
 
 const { showNowLine, nowLineTopPercent, nowLineLabel, scrollToNowCentered } = useCalendarioNowLine({
@@ -169,38 +201,6 @@ function onItemPointerDown(item: CalendarioDragItem, e: PointerEvent) {
   if ((e.target as HTMLElement).closest('[data-cal-resize]')) return
   beginDrag(item, e)
 }
-
-const todayStr = formatYmd(new Date())
-
-const focusDay = ref(
-  selectedDate.value ? parseYmd(selectedDate.value) : new Date(),
-)
-
-watch(
-  () => selectedDate.value,
-  (d) => {
-    if (!d) return
-    const parsed = parseYmd(d)
-    if (formatYmd(parsed) !== formatYmd(focusDay.value)) {
-      focusDay.value = parsed
-    }
-  },
-)
-
-watch(focusDay, () => {
-  const ymd = formatYmd(focusDay.value)
-  if (selectedDate.value !== ymd) selectedDate.value = ymd
-  const y = focusDay.value.getFullYear()
-  if (schoolYear.value !== y) schoolYear.value = y
-})
-
-const miniMonth = ref(new Date(focusDay.value.getFullYear(), focusDay.value.getMonth(), 1))
-
-watch(focusDay, (d) => {
-  if (d.getMonth() !== miniMonth.value.getMonth() || d.getFullYear() !== miniMonth.value.getFullYear()) {
-    miniMonth.value = new Date(d.getFullYear(), d.getMonth(), 1)
-  }
-})
 
 const weekStart = computed(() => startOfWeekMonday(focusDay.value))
 
@@ -550,8 +550,8 @@ function openTaskDetail(task: CalTask) {
       @refresh="$emit('refresh')"
     />
 
-    <div :class="['isolate flex min-h-0 flex-1', gcalSurface]">
-      <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div :class="['isolate flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row', gcalSurface]">
+      <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div
           v-if="allDayEvents.length > 0"
           class="shrink-0 border-b border-gray-200 bg-white/80 px-4 py-2 dark:border-white/10 dark:bg-gray-900/80"
@@ -611,7 +611,7 @@ function openTaskDetail(task: CalTask) {
           </button>
         </div>
 
-        <div class="gcal-grid-with-gutter min-h-0 flex-1">
+        <div class="gcal-grid-with-gutter min-h-0 flex-1 overflow-hidden">
           <div
             class="gcal-scroll-viewport min-h-0 flex-1 border-r border-gray-200 dark:border-white/10"
           >
@@ -812,7 +812,7 @@ function openTaskDetail(task: CalTask) {
       </div>
 
       <aside
-        class="hidden w-full max-w-xs shrink-0 flex-col border-l border-gray-200 px-6 py-6 md:flex dark:border-white/10"
+        class="hidden w-80 max-w-xs shrink-0 flex-col border-l border-gray-200 px-6 py-6 md:flex dark:border-white/10"
       >
         <div class="flex items-center text-center text-gray-900 dark:text-white">
           <button
