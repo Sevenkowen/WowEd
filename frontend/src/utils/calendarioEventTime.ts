@@ -132,14 +132,39 @@ export function moveCalEvent(source: CalEvent, newDate: string, newStartTime: st
   }
 }
 
-/** Mueve una tarea a otra fecha/hora (actualización optimista en UI). */
+/** Mueve una tarea a otra fecha/hora conservando la duración (actualización optimista en UI). */
 export function moveCalTask(source: CalTask, newDate: string, newTime: string | null): CalTask {
   let eventId = source.eventId ?? null
   if (eventId && newDate !== source.date) eventId = null
+
+  const startRaw = newTime?.trim()
+  if (!startRaw) {
+    return {
+      ...source,
+      date: newDate,
+      eventId,
+      time: undefined,
+    }
+  }
+
+  let endTime = source.endTime
+  if (source.time) {
+    const startMin = parseTimeToMinutes(source.time)
+    const duration = Math.max(30, endMinutesFromTask(source) - startMin)
+    const newStartMin = parseTimeToMinutes(startRaw)
+    const endMin = newStartMin + duration
+    endTime = formatTimeLabel(Math.floor(endMin / 60) % 24, endMin % 60)
+  } else if (!endTime) {
+    const newStartMin = parseTimeToMinutes(startRaw)
+    const endMin = newStartMin + 30
+    endTime = formatTimeLabel(Math.floor(endMin / 60) % 24, endMin % 60)
+  }
+
   return {
     ...source,
     date: newDate,
     eventId,
-    time: newTime?.trim() || undefined,
+    time: startRaw,
+    endTime,
   }
 }

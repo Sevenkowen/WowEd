@@ -321,9 +321,19 @@ def move_task(task_id: str, body: MoveTaskBody, db: Session = Depends(get_db)):
     if not task:
         raise HTTPException(404, "Tarea no encontrada")
     _reject_past_modify(task.due_date, body.date)
+
+    duration = timedelta(minutes=30)
+    if task.due_date and task.start_time and task.end_time:
+        start_dt = datetime.combine(task.due_date, task.start_time)
+        end_dt = datetime.combine(task.due_date, task.end_time)
+        if end_dt > start_dt:
+            duration = end_dt - start_dt
+
     task.due_date = date_cls.fromisoformat(body.date)
     if body.time:
         task.start_time = parse_hhmm(body.time)
+        end_dt = datetime.combine(task.due_date, task.start_time) + duration
+        task.end_time = end_dt.time()
     db.commit()
     db.refresh(task)
     return task_to_dto(task)

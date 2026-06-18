@@ -8,7 +8,7 @@ import {
   type CalTaskCuadrante,
   type CalTaskTipo,
 } from '@/data/calendarioTareaOptions'
-import { parseTimeToMinutes, formatTimeLabel } from '@/utils/calendarioEventTime'
+import { parseTimeToMinutes, formatTimeLabel, moveCalTask } from '@/utils/calendarioEventTime'
 import {
   isCalendarModifyAllowed,
   isCalendarSlotCreateAllowed,
@@ -204,18 +204,7 @@ export function useCalendarioEscolarTasks() {
     if (!task || foundIndex < 0) return false
     if (!isCalendarModifyAllowed(foundDate, newDate, newTime)) return false
 
-    let eventId = task.eventId ?? null
-    if (eventId && newDate !== foundDate) {
-      eventId = null
-    }
-
-    const moved: CalTask = {
-      ...task,
-      date: newDate,
-      eventId,
-      time: newTime?.trim() || undefined,
-      endTime: task.endTime,
-    }
+    const moved = moveCalTask(task, newDate, newTime)
 
     const next = { ...userTasksByDate.value }
     const oldList = [...(next[foundDate] ?? [])]
