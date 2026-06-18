@@ -11,6 +11,8 @@ import {
   isAllDayEvent,
   minutesFromEvent,
   parseTimeToMinutes,
+  resizeCalEvent,
+  moveCalEvent,
 } from '@/utils/calendarioEventTime'
 import {
   isCalendarModifyAllowed,
@@ -32,6 +34,16 @@ export interface NuevoCalendarioEvento {
   endTime?: string
   allDay?: boolean
   recurrence?: CalRecurrencePreset
+  eventType?: string
+}
+
+export interface UpdateCalendarioEvento {
+  title?: string
+  description?: string
+  date?: string
+  startTime?: string | null
+  endTime?: string | null
+  allDay?: boolean
   eventType?: string
 }
 
@@ -110,51 +122,13 @@ function findDemoEvent(eventId: string): CalEvent | null {
 }
 
 function buildResizedEvent(source: CalEvent, date: string, newEndTime: string, newId?: string): CalEvent {
-  if (isAllDayEvent(source)) {
-    return { ...source, id: newId ?? source.id, datetime: `${date}T00:00` }
-  }
-  const startMin = minutesFromEvent(source)
-  if (startMin === null) return source
-  let endMin = parseTimeToMinutes(newEndTime)
-  if (endMin <= startMin) endMin = startMin + 30
-  const startTime = formatTimeLabel(Math.floor(startMin / 60) % 24, startMin % 60)
-  const endTime = formatTimeLabel(Math.floor(endMin / 60) % 24, endMin % 60)
-
-  return {
-    ...source,
-    id: newId ?? source.id,
-    datetime: buildEventDatetime(date, startTime),
-    endDatetime: buildEventDatetime(date, endTime),
-    time: formatEventTimeRange(startTime, endTime),
-  }
+  const resized = resizeCalEvent(source, date, newEndTime)
+  return newId ? { ...resized, id: newId } : resized
 }
 
 function buildMovedEvent(source: CalEvent, newDate: string, newStartTime: string, newId?: string): CalEvent {
-  if (isAllDayEvent(source)) {
-    return {
-      ...source,
-      id: newId ?? source.id,
-      datetime: `${newDate}T00:00`,
-      time: ALL_DAY_EVENT_LABEL,
-      endDatetime: undefined,
-    }
-  }
-  const startMin = minutesFromEvent(source)
-  const duration =
-    startMin === null
-      ? 60
-      : Math.max(30, endMinutesFromEvent(source) - startMin)
-  const newStartMin = parseTimeToMinutes(newStartTime)
-  const endMin = newStartMin + duration
-  const endTime = formatTimeLabel(Math.floor(endMin / 60) % 24, endMin % 60)
-
-  return {
-    ...source,
-    id: newId ?? source.id,
-    datetime: buildEventDatetime(newDate, newStartTime),
-    endDatetime: buildEventDatetime(newDate, endTime),
-    time: formatEventTimeRange(newStartTime, endTime),
-  }
+  const moved = moveCalEvent(source, newDate, newStartTime)
+  return newId ? { ...moved, id: newId } : moved
 }
 
 function buildEventFromInput(input: NuevoCalendarioEvento, date: string, id?: string): CalEvent | null {
@@ -200,6 +174,99 @@ function findUserEvent(eventId: string): { date: string; index: number; event: C
     if (index >= 0) return { date, index, event: events[index] }
   }
   return null
+}
+
+function eventFieldsToInput(ev: CalEvent, date: string): NuevoCalendarioEvento {
+  if (isAllDayEvent(ev)) {
+    return {
+      date,
+      title: ev.name,
+      description: ev.description,
+      allDay: true,
+      eventType: ev.eventType,
+    }
+  }
+  const startMin = minutesFromEvent(ev)
+  const endMin = endMinutesFromEvent(ev)
+  const startTime =
+    startMin !== null
+      ? formatTimeLabel(Math.floor(startMin / 60) % 24, startMin % 60)
+      : '09:00'
+  const endTime = formatTimeLabel(Math.floor(endMin / 60) % 24, endMin % 60)
+  return {
+    date,
+    title: ev.name,
+    description: ev.description,
+    allDay: false,
+    startTime,
+    endTime,
+    eventType: ev.eventType,
+  }
+}
+
+function mergeEventPatch(ev: CalEvent, date: string, patch: UpdateCalendarioEvento): NuevoCalendarioEvento {
+  const current = eventFieldsToInput(ev, date)
+  const newDate = patch.date ?? date
+  const allDay = patch.allDay ?? current.allDay ?? false
+  return {
+    date: newDate,
+    title: patch.title ?? current.title,
+    description: patch.description !== undefined ? patch.description : current.description,
+    allDay,
+    startTime:
+      patch.startTime !== undefined
+        ? patch.startTime ?? undefined
+        : current.startTime,
+    endTime:
+      patch.endTime !== undefined ? patch.endTime ?? undefined : current.endTime,
+    eventType: patch.eventType ?? current.eventType,
+  }
+}
+
+function applyEventPatch(eventId: string, patch: UpdateCalendarioEvento, sourceId?: string): boolean {
+  const found = findUserEvent(eventId)
+  if (found) {
+    const newDate = patch.date ?? found.date
+    const startForCheck = patch.allDay
+      ? null
+      : (patch.startTime !== undefined ? patch.startTime : eventFieldsToInput(found.event, found.date).startTime) ?? null
+    if (!isCalendarModifyAllowed(found.date, newDate, startForCheck)) return false
+    if (!isCalendarSlotCreateAllowed(newDate, patch.allDay ? null : startForCheck)) return false
+
+    const merged = mergeEventPatch(found.event, found.date, patch)
+    const rebuilt = buildEventFromInput(merged, newDate, sourceId ?? found.event.id)
+    if (!rebuilt) return false
+
+    let next = removeFromDateMap(userEventsByDate.value, found.date, found.index)
+    next = { ...next, [newDate]: [...(next[newDate] ?? []), rebuilt] }
+    userEventsByDate.value = next
+    persistUserEvents()
+    return true
+  }
+
+  const demoEvent = findDemoEvent(eventId)
+  if (!demoEvent) return false
+  const demoDate = demoEvent.datetime.slice(0, 10)
+  const newDate = patch.date ?? demoDate
+  const startForCheck = patch.allDay
+    ? null
+    : (patch.startTime !== undefined ? patch.startTime : eventFieldsToInput(demoEvent, demoDate).startTime) ?? null
+  if (!isCalendarModifyAllowed(demoDate, newDate, startForCheck)) return false
+  if (!isCalendarSlotCreateAllowed(newDate, patch.allDay ? null : startForCheck)) return false
+
+  const merged = mergeEventPatch(demoEvent, demoDate, patch)
+  const newId = sourceId ?? String(nextId++)
+  const rebuilt = buildEventFromInput(merged, newDate, newId)
+  if (!rebuilt) return false
+
+  userEventsByDate.value = {
+    ...userEventsByDate.value,
+    [newDate]: [...(userEventsByDate.value[newDate] ?? []), rebuilt],
+  }
+  relocatedDemoEventIds.value = new Set([...relocatedDemoEventIds.value, eventId])
+  persistUserEvents()
+  persistRelocatedDemoIds()
+  return true
 }
 
 function removeFromDateMap(
@@ -335,6 +402,28 @@ export function useCalendarioEscolarEvents() {
     return true
   }
 
+  function patchEvent(eventId: string, patch: UpdateCalendarioEvento): boolean {
+    return applyEventPatch(eventId, patch)
+  }
+
+  function deleteEvent(eventId: string): boolean {
+    const found = findUserEvent(eventId)
+    if (found) {
+      if (!isCalendarModifyAllowed(found.date)) return false
+      userEventsByDate.value = removeFromDateMap(userEventsByDate.value, found.date, found.index)
+      persistUserEvents()
+      return true
+    }
+
+    const demoEvent = findDemoEvent(eventId)
+    if (!demoEvent) return false
+    const date = demoEvent.datetime.slice(0, 10)
+    if (!isCalendarModifyAllowed(date)) return false
+    relocatedDemoEventIds.value = new Set([...relocatedDemoEventIds.value, eventId])
+    persistRelocatedDemoIds()
+    return true
+  }
+
   return {
     porFecha,
     eventosDelDia,
@@ -344,5 +433,7 @@ export function useCalendarioEscolarEvents() {
     isUserEvent,
     moveEvent,
     resizeEvent,
+    patchEvent,
+    deleteEvent,
   }
 }

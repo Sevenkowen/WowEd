@@ -9,7 +9,7 @@ import {
   fetchTasksPorFecha,
 } from '@/api/calendarioApi'
 import type { NuevaCalendarioTarea, UpdateCalendarioTarea } from '@/composables/useCalendarioEscolarTasks'
-import { parseTimeToMinutes, formatTimeLabel } from '@/utils/calendarioEventTime'
+import { parseTimeToMinutes, formatTimeLabel, moveCalTask, resizeCalTask } from '@/utils/calendarioEventTime'
 import {
   isCalendarModifyAllowed,
   isCalendarSlotCreateAllowed,
@@ -18,6 +18,53 @@ import {
 import type { CalRecurrencePreset } from '@/utils/calendarioRecurrence'
 import { expandRecurrenceDates } from '@/utils/calendarioRecurrence'
 const apiPorFecha = ref<Record<string, CalTask[]>>({})
+
+function patchTaskInMap(
+  map: Record<string, CalTask[]>,
+  taskId: string,
+  patch: (task: CalTask) => CalTask,
+): Record<string, CalTask[]> {
+  for (const [date, tasks] of Object.entries(map)) {
+    const idx = tasks.findIndex((t) => t.id === taskId)
+    if (idx < 0) continue
+    const next = { ...map }
+    const list = [...tasks]
+    list[idx] = patch(list[idx])
+    next[date] = list
+    return next
+  }
+  return map
+}
+
+function moveTaskInMap(
+  map: Record<string, CalTask[]>,
+  taskId: string,
+  newDate: string,
+  newTime: string | null,
+): Record<string, CalTask[]> {
+  for (const [date, tasks] of Object.entries(map)) {
+    const idx = tasks.findIndex((t) => t.id === taskId)
+    if (idx < 0) continue
+
+    const moved = moveCalTask(tasks[idx], newDate, newTime)
+    if (date === newDate) {
+      const next = { ...map }
+      const list = [...tasks]
+      list[idx] = moved
+      next[date] = list
+      return next
+    }
+
+    const next = { ...map }
+    const oldList = [...tasks]
+    oldList.splice(idx, 1)
+    if (oldList.length) next[date] = oldList
+    else delete next[date]
+    next[newDate] = [...(next[newDate] ?? []), moved]
+    return next
+  }
+  return map
+}
 
 async function loadAll() {
   apiPorFecha.value = await fetchTasksPorFecha()
@@ -94,17 +141,35 @@ export function useCalendarioEscolarTasksApi() {
   async function moveTask(taskId: string, newDate: string, newTime: string | null): Promise<boolean> {
     const task = todasLasTareas.value.find((t) => t.id === taskId)
     if (!task || !isCalendarModifyAllowed(task.date, newDate, newTime)) return false
-    await apiMoveTask(taskId, newDate, newTime)
-    await loadAll()
-    return true
+
+    const snapshot = apiPorFecha.value
+    apiPorFecha.value = moveTaskInMap(snapshot, taskId, newDate, newTime)
+
+    try {
+      await apiMoveTask(taskId, newDate, newTime)
+      await loadAll()
+      return true
+    } catch {
+      apiPorFecha.value = snapshot
+      return false
+    }
   }
 
   async function resizeTask(taskId: string, newEndTime: string): Promise<boolean> {
     const task = todasLasTareas.value.find((t) => t.id === taskId)
     if (!task || !isCalendarModifyAllowed(task.date)) return false
-    await apiResizeTask(taskId, newEndTime)
-    await loadAll()
-    return true
+
+    const snapshot = apiPorFecha.value
+    apiPorFecha.value = patchTaskInMap(snapshot, taskId, (t) => resizeCalTask(t, newEndTime))
+
+    try {
+      await apiResizeTask(taskId, newEndTime)
+      await loadAll()
+      return true
+    } catch {
+      apiPorFecha.value = snapshot
+      return false
+    }
   }
 
   async function toggleCompletada(taskId: string): Promise<void> {

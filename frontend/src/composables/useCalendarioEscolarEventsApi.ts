@@ -16,6 +16,7 @@ import {
 } from '@/utils/calendarioDates'
 import type { CalRecurrencePreset } from '@/utils/calendarioRecurrence'
 import { expandRecurrenceDates } from '@/utils/calendarioRecurrence'
+import { moveCalEvent, resizeCalEvent } from '@/utils/calendarioEventTime'
 import type { NuevoCalendarioEvento } from '@/composables/useCalendarioEscolarEvents'
 
 const apiPorFecha = ref<Record<string, CalEvent[]>>({})
@@ -25,6 +26,53 @@ async function loadAll() {
 }
 
 void loadAll()
+
+function patchEventInMap(
+  map: Record<string, CalEvent[]>,
+  eventId: string,
+  patch: (event: CalEvent) => CalEvent,
+): Record<string, CalEvent[]> {
+  for (const [date, events] of Object.entries(map)) {
+    const idx = events.findIndex((e) => e.id === eventId)
+    if (idx < 0) continue
+    const next = { ...map }
+    const list = [...events]
+    list[idx] = patch(list[idx])
+    next[date] = list
+    return next
+  }
+  return map
+}
+
+function moveEventInMap(
+  map: Record<string, CalEvent[]>,
+  eventId: string,
+  newDate: string,
+  newStartTime: string,
+): Record<string, CalEvent[]> {
+  const from = findEventDate(map, eventId)
+  if (!from) return map
+  const fromList = map[from] ?? []
+  const idx = fromList.findIndex((e) => e.id === eventId)
+  if (idx < 0) return map
+
+  const moved = moveCalEvent(fromList[idx], newDate, newStartTime)
+  if (from === newDate) {
+    const next = { ...map }
+    const list = [...fromList]
+    list[idx] = moved
+    next[from] = list
+    return next
+  }
+
+  const next = { ...map }
+  const oldList = [...fromList]
+  oldList.splice(idx, 1)
+  if (oldList.length) next[from] = oldList
+  else delete next[from]
+  next[newDate] = [...(next[newDate] ?? []), moved]
+  return next
+}
 
 function findEventDate(map: Record<string, CalEvent[]>, eventId: string): string | null {
   for (const [date, events] of Object.entries(map)) {
@@ -97,17 +145,37 @@ export function useCalendarioEscolarEventsApi() {
   async function moveEvent(eventId: string, newDate: string, newStartTime: string): Promise<boolean> {
     const from = findEventDate(apiPorFecha.value, eventId)
     if (!from || !isCalendarModifyAllowed(from, newDate, newStartTime)) return false
-    await apiMoveEvent(eventId, newDate, newStartTime)
-    await loadAll()
-    return true
+
+    const snapshot = apiPorFecha.value
+    apiPorFecha.value = moveEventInMap(snapshot, eventId, newDate, newStartTime)
+
+    try {
+      await apiMoveEvent(eventId, newDate, newStartTime)
+      await loadAll()
+      return true
+    } catch {
+      apiPorFecha.value = snapshot
+      return false
+    }
   }
 
   async function resizeEvent(eventId: string, newEndTime: string): Promise<boolean> {
     const date = findEventDate(apiPorFecha.value, eventId)
     if (!date || !isCalendarModifyAllowed(date)) return false
-    await apiResizeEvent(eventId, newEndTime)
-    await loadAll()
-    return true
+
+    const snapshot = apiPorFecha.value
+    apiPorFecha.value = patchEventInMap(snapshot, eventId, (event) =>
+      resizeCalEvent(event, date, newEndTime),
+    )
+
+    try {
+      await apiResizeEvent(eventId, newEndTime)
+      await loadAll()
+      return true
+    } catch {
+      apiPorFecha.value = snapshot
+      return false
+    }
   }
 
   async function patchEvent(

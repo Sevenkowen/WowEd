@@ -26,6 +26,8 @@ import CalendarioEscolarNavToolbar from '@/components/calendario/CalendarioEscol
 import CalendarioDiaEventosDialog from '@/components/calendario/CalendarioDiaEventosDialog.vue'
 import CalendarioMesDiaPopover from '@/components/calendario/CalendarioMesDiaPopover.vue'
 import CalendarioMesItemDetallePopover from '@/components/calendario/CalendarioMesItemDetallePopover.vue'
+import CalendarioTareaDetalleDialog from '@/components/calendario/CalendarioTareaDetalleDialog.vue'
+import CalendarioEventoDetalleDialog from '@/components/calendario/CalendarioEventoDetalleDialog.vue'
 import type { CalendarioDetalle } from '@/components/calendario/CalendarioItemDetalleDialog.vue'
 
 defineOptions({ name: 'CalendarioEscolarMonth' })
@@ -159,6 +161,21 @@ const detailOpen = ref(false)
 const detailAnchor = ref<DOMRect | null>(null)
 const detalle = ref<CalendarioDetalle | null>(null)
 const dayPopoverRef = ref<InstanceType<typeof CalendarioMesDiaPopover> | null>(null)
+
+const taskEditOpen = ref(false)
+const taskEditId = ref<string | null>(null)
+const eventEditOpen = ref(false)
+const eventEditId = ref<string | null>(null)
+
+function onDetailEdit(item: CalendarioDetalle) {
+  if (item.type === 'task') {
+    taskEditId.value = item.task.id
+    taskEditOpen.value = true
+  } else {
+    eventEditId.value = item.event.id
+    eventEditOpen.value = true
+  }
+}
 
 function isDesktopMonth(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
@@ -436,7 +453,12 @@ const weekDays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'] as const
       v-model:detalle="detalle"
       :anchor="detailAnchor"
       @close="onDetailClose"
+      @edit="onDetailEdit"
+      @deleted="onDetailClose"
     />
+
+    <CalendarioTareaDetalleDialog v-model:open="taskEditOpen" v-model:task-id="taskEditId" />
+    <CalendarioEventoDetalleDialog v-model:open="eventEditOpen" v-model:event-id="eventEditId" />
 
     <CalendarioDiaEventosDialog
       v-model:open="dayEventsOpen"

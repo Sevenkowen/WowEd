@@ -298,15 +298,24 @@ watch(tab, () => resetForm())
                       </div>
                     </div>
                     <p v-if="formError" class="text-sm text-red-600 dark:text-red-400">{{ formError }}</p>
-                    <div class="flex flex-wrap gap-2">
-                      <button type="button" :class="gcalPrimaryBtn" @click="saveItem">
-                        <PlusIcon v-if="!editingId" class="size-4" aria-hidden="true" />
+                    <div class="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        :class="[
+                          gcalPrimaryBtn,
+                          tab === 'tareas'
+                            ? 'bg-violet-600 hover:bg-violet-500 dark:bg-violet-500 dark:hover:bg-violet-400'
+                            : '',
+                        ]"
+                        @click="saveItem"
+                      >
+                        <PlusIcon v-if="!editingId" class="size-4 shrink-0" aria-hidden="true" />
                         {{ editingId ? 'Guardar cambios' : 'Agregar' }}
                       </button>
                       <button
                         v-if="editingId"
                         type="button"
-                        class="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
+                        class="inline-flex items-center justify-center rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
                         @click="cancelEdit"
                       >
                         Cancelar

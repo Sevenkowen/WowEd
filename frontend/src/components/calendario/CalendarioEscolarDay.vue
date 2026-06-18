@@ -59,7 +59,7 @@ import {
   calendarioHourCount,
   calendarioHourLabel,
 } from '@/utils/calendarioGridConstants'
-import { timedGridItemLiClass } from '@/utils/calendarioTimedGridStyles'
+import { timedGridItemLiClass, timedGridResizingClass, timedGridSyncingClass } from '@/utils/calendarioTimedGridStyles'
 
 defineOptions({ name: 'CalendarioEscolarDay' })
 
@@ -151,16 +151,26 @@ const { isSlotDisabled: isDaySlotDisabled } = useCalendarioPastSlots(
   () => [{ date: dayYmd.value }],
 )
 
-const { dragging, hover, beginDrag, isDraggingItem, isHoverCell, justDragged, showDragPreview } = useCalendarioGridDrag({
+const {
+  dragging,
+  hover,
+  beginDrag,
+  isDraggingItem,
+  isSyncingItem: isSyncingDragItem,
+  pendingDropStartTime,
+  isHoverCell,
+  justDragged,
+  showDragPreview,
+} = useCalendarioGridDrag({
   gridRef,
   dayCount: 1,
   gridRows: GRID_ROWS,
   dayStartMinutes,
   getDateForDayIndex: () => dayYmd.value,
   canDrag: () => !isDateBeforeToday(dayYmd.value),
-  onDrop: (item, date, startTime) => {
-    if (item.kind === 'event') moveEvent(item.id, date, startTime)
-    else moveTask(item.id, date, startTime)
+  onDrop: async (item, date, startTime) => {
+    if (item.kind === 'event') await moveEvent(item.id, date, startTime)
+    else await moveTask(item.id, date, startTime)
     selectedDate.value = date
   },
 })
@@ -404,6 +414,8 @@ const {
   beginResize: beginTaskResize,
   previewSpan: taskPreviewSpan,
   isResizingItem: isResizingTask,
+  isSyncingItem: isSyncingTask,
+  pendingEndTime: taskPendingEndTime,
   preview: taskResizePreview,
   justResized: justTaskResized,
 } = useCalendarioGridResize({
@@ -419,6 +431,8 @@ const {
   beginResize: beginEventResize,
   previewSpan: eventPreviewSpan,
   isResizingItem: isResizingEvent,
+  isSyncingItem: isSyncingEvent,
+  pendingEndTime: eventPendingEndTime,
   preview: eventResizePreview,
   justResized: justEventResized,
 } = useCalendarioGridResize({
@@ -440,7 +454,26 @@ function eventSpan(ev: DayTimedEvent): number {
   return eventPreviewSpan(ev.id, ev.gridSpan)
 }
 
+function timedGridBlockStateClass(
+  isResizing: boolean,
+  isSyncingResize: boolean,
+  isSyncingDrag: boolean,
+): string {
+  if (isResizing) return timedGridResizingClass()
+  if (isSyncingResize || isSyncingDrag) return timedGridSyncingClass()
+  return ''
+}
+
 function taskTimeLabel(task: CalTask): string {
+  const pendingStart = pendingDropStartTime(task.id, 'task')
+  if (pendingStart && task.time) {
+    const span = gridSpanFromTask(task)
+    return dragPreviewTimeLabel(span, pendingStart)
+  }
+  const pendingEnd = taskPendingEndTime(task.id)
+  if (pendingEnd && task.time) {
+    return formatEventTimeRange(task.time, pendingEnd)
+  }
   if (isResizingTask(task.id) && taskResizePreview.value && task.time) {
     return formatEventTimeRange(task.time, taskResizePreview.value.endTime)
   }
@@ -454,6 +487,15 @@ function eventStartTime(ev: CalEvent): string {
 }
 
 function eventTimeLabel(ev: CalEvent): string {
+  const pendingStart = pendingDropStartTime(ev.id, 'event')
+  if (pendingStart) {
+    const span = gridSpanFromEvent(ev)
+    return dragPreviewTimeLabel(span, pendingStart)
+  }
+  const pendingEnd = eventPendingEndTime(ev.id)
+  if (pendingEnd) {
+    return formatEventTimeRange(eventStartTime(ev), pendingEnd)
+  }
   if (isResizingEvent(ev.id) && eventResizePreview.value) {
     return formatEventTimeRange(eventStartTime(ev), eventResizePreview.value.endTime)
   }
@@ -558,7 +600,7 @@ function openTaskDetail(task: CalTask) {
       <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div
           v-if="allDayEvents.length > 0"
-          class="shrink-0 border-b border-gray-200 bg-white/80 px-4 py-2 dark:border-white/10 dark:bg-gray-900/80"
+          class="relative z-50 shrink-0 border-b border-gray-200 bg-white/80 px-4 py-2 dark:border-white/10 dark:bg-gray-900/80"
         >
           <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
             <span class="shrink-0 pt-1 text-[11px] font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
@@ -597,7 +639,7 @@ function openTaskDetail(task: CalTask) {
         </div>
         <div
           v-if="standaloneTasks.length > 0"
-          class="shrink-0 border-b border-gray-200 bg-white/80 px-4 py-2 dark:border-white/10 dark:bg-gray-900/80"
+          class="relative z-50 shrink-0 border-b border-gray-200 bg-white/80 px-4 py-2 dark:border-white/10 dark:bg-gray-900/80"
         >
           <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <span class="shrink-0 text-[11px] font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
@@ -719,7 +761,7 @@ function openTaskDetail(task: CalTask) {
                   :class="[
                     timedGridItemLiClass(),
                     isDraggingItem(dragItemPayload('task', task.id, taskSpan(task), task.gridRow)) ? 'z-20' : '',
-                    isResizingTask(task.id) ? 'z-30' : '',
+                    isResizingTask(task.id) || isSyncingTask(task.id) || isSyncingDragItem(dragItemPayload('task', task.id, taskSpan(task), task.gridRow)) ? 'z-30' : '',
                   ]"
                   :style="{ gridRow: `${task.gridRow} / span ${taskSpan(task)}` }"
                 >
@@ -728,7 +770,11 @@ function openTaskDetail(task: CalTask) {
                       timedTaskBlockClass(),
                       dragItemClass(dragItemPayload('task', task.id, taskSpan(task), task.gridRow)),
                       'group text-left',
-                      isResizingTask(task.id) ? 'ring-2 ring-white/50' : '',
+                      timedGridBlockStateClass(
+                        isResizingTask(task.id),
+                        isSyncingTask(task.id),
+                        isSyncingDragItem(dragItemPayload('task', task.id, taskSpan(task), task.gridRow)),
+                      ),
                     ]"
                     @pointerdown="onItemPointerDown(dragItemPayload('task', task.id, taskSpan(task), task.gridRow), $event)"
                     @click="!justDragged && !justResized && openTaskDetail(task)"
@@ -736,7 +782,7 @@ function openTaskDetail(task: CalTask) {
                     <p :class="timedTaskTitleClass()">{{ taskDisplayTitle(task) }}</p>
                     <p :class="timedTaskTimeClass()">{{ taskTimeLabel(task) }}</p>
                     <div
-                      v-if="!isDateBeforeToday(dayYmd) && !isDraggingItem(dragItemPayload('task', task.id, taskSpan(task), task.gridRow))"
+                      v-if="!isDateBeforeToday(dayYmd) && !isDraggingItem(dragItemPayload('task', task.id, taskSpan(task), task.gridRow)) && !isSyncingTask(task.id) && !isSyncingDragItem(dragItemPayload('task', task.id, taskSpan(task), task.gridRow))"
                       data-cal-resize
                       :class="timedTaskResizeHandleClass()"
                       aria-label="Ajustar duración de la tarea"
@@ -751,7 +797,7 @@ function openTaskDetail(task: CalTask) {
                   :class="[
                     timedGridItemLiClass(),
                     isDraggingItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow)) ? 'z-20' : '',
-                    isResizingEvent(ev.id) ? 'z-30' : '',
+                    isResizingEvent(ev.id) || isSyncingEvent(ev.id) || isSyncingDragItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow)) ? 'z-30' : '',
                   ]"
                   :style="{ gridRow: `${ev.gridRow} / span ${eventSpan(ev)}` }"
                 >
@@ -761,7 +807,11 @@ function openTaskDetail(task: CalTask) {
                       dragEventClass(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow)),
                       'group flex min-h-0 flex-col',
                       eventSpan(ev) === 1 ? 'justify-center' : '',
-                      isResizingEvent(ev.id) ? 'ring-2 ring-white/50' : '',
+                      timedGridBlockStateClass(
+                        isResizingEvent(ev.id),
+                        isSyncingEvent(ev.id),
+                        isSyncingDragItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow)),
+                      ),
                     ]"
                     :style="eventTypeBgStyleFromEvent(ev)"
                     @pointerdown="onItemPointerDown(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow), $event)"
@@ -788,7 +838,7 @@ function openTaskDetail(task: CalTask) {
                       </template>
                     </CalendarioEventTasksInline>
                     <div
-                      v-if="!isDateBeforeToday(dayYmd) && !isDraggingItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow))"
+                      v-if="!isDateBeforeToday(dayYmd) && !isDraggingItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow)) && !isSyncingEvent(ev.id) && !isSyncingDragItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow))"
                       data-cal-resize
                       :class="timedEventResizeHandleClass()"
                       aria-label="Ajustar duración del evento"

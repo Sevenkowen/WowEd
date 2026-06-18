@@ -8,7 +8,7 @@ export interface CalendarioGridResizeConfig {
   slotMinutes?: number
   getStartGridRow: (taskId: string) => number | null
   canResize?: (id: string) => boolean
-  onCommit: (taskId: string, endTime: string) => void
+  onCommit: (taskId: string, endTime: string) => void | boolean | Promise<void | boolean>
 }
 
 export interface CalendarioResizePreview {
@@ -21,7 +21,9 @@ export interface CalendarioResizePreview {
 export function useCalendarioGridResize(config: CalendarioGridResizeConfig) {
   const slotMinutes = config.slotMinutes ?? 30
   const resizing = ref(false)
+  const syncing = ref(false)
   const preview = ref<CalendarioResizePreview | null>(null)
+  const pendingCommit = ref<CalendarioResizePreview | null>(null)
   const justResized = ref(false)
 
   let taskId: string | null = null
@@ -42,13 +44,10 @@ export function useCalendarioGridResize(config: CalendarioGridResizeConfig) {
     return formatTimeLabel(Math.floor(endMinutes / 60) % 24, endMinutes % 60)
   }
 
-  function updatePreview(clientY: number) {
-    if (taskId === null) return
-    const hoveredRow = gridRowFromPointer(clientY)
-    if (hoveredRow === null) return
-    const endGridRow = Math.max(startGridRow, hoveredRow)
+  function buildPreview(endGridRow: number): CalendarioResizePreview | null {
+    if (taskId === null) return null
     const gridSpan = endGridRow - startGridRow + 1
-    preview.value = {
+    return {
       taskId,
       endGridRow,
       endTime: endTimeFromGridRow(endGridRow),
@@ -56,21 +55,24 @@ export function useCalendarioGridResize(config: CalendarioGridResizeConfig) {
     }
   }
 
+  function updatePreview(clientY: number) {
+    if (taskId === null) return
+    const hoveredRow = gridRowFromPointer(clientY)
+    if (hoveredRow === null) return
+    const endGridRow = Math.max(startGridRow, hoveredRow)
+    preview.value = buildPreview(endGridRow)
+  }
+
   function onPointerMove(e: PointerEvent) {
     if (pointerId !== e.pointerId) return
     updatePreview(e.clientY)
   }
 
-  function onPointerUp(e: PointerEvent) {
+  async function onPointerUp(e: PointerEvent) {
     if (pointerId !== e.pointerId) return
 
-    if (preview.value && taskId !== null) {
-      config.onCommit(taskId, preview.value.endTime)
-      justResized.value = true
-      window.setTimeout(() => {
-        justResized.value = false
-      }, 200)
-    }
+    const commitPreview = preview.value
+    const commitId = taskId
 
     resizing.value = false
     preview.value = null
@@ -80,10 +82,27 @@ export function useCalendarioGridResize(config: CalendarioGridResizeConfig) {
     window.removeEventListener('pointermove', onPointerMove)
     window.removeEventListener('pointerup', onPointerUp)
     window.removeEventListener('pointercancel', onPointerUp)
+
+    if (!commitPreview || commitId === null) return
+
+    pendingCommit.value = commitPreview
+    syncing.value = true
+    justResized.value = true
+
+    try {
+      await Promise.resolve(config.onCommit(commitId, commitPreview.endTime))
+    } finally {
+      pendingCommit.value = null
+      syncing.value = false
+      window.setTimeout(() => {
+        justResized.value = false
+      }, 200)
+    }
   }
 
   function beginResize(id: string, e: PointerEvent) {
     if (e.button !== 0) return
+    if (syncing.value) return
     if (config.canResize && !config.canResize(id)) return
     const row = config.getStartGridRow(id)
     if (row === null) return
@@ -102,13 +121,28 @@ export function useCalendarioGridResize(config: CalendarioGridResizeConfig) {
     window.addEventListener('pointercancel', onPointerUp)
   }
 
+  function activePreview(id: string): CalendarioResizePreview | null {
+    if (preview.value?.taskId === id) return preview.value
+    if (pendingCommit.value?.taskId === id) return pendingCommit.value
+    return null
+  }
+
   function previewSpan(id: string, defaultSpan: number): number {
-    if (preview.value?.taskId === id) return preview.value.gridSpan
-    return defaultSpan
+    const active = activePreview(id)
+    return active?.gridSpan ?? defaultSpan
   }
 
   function isResizingItem(id: string): boolean {
     return preview.value?.taskId === id
+  }
+
+  function isSyncingItem(id: string): boolean {
+    return pendingCommit.value?.taskId === id
+  }
+
+  function pendingEndTime(id: string): string | null {
+    if (pendingCommit.value?.taskId === id) return pendingCommit.value.endTime
+    return null
   }
 
   onBeforeUnmount(() => {
@@ -119,11 +153,15 @@ export function useCalendarioGridResize(config: CalendarioGridResizeConfig) {
 
   return {
     resizing,
+    syncing,
     preview,
+    pendingCommit,
     justResized,
     beginResize,
     previewSpan,
     isResizingItem,
+    isSyncingItem,
+    pendingEndTime,
     /** @deprecated use isResizingItem */
     isResizingTask: isResizingItem,
   }

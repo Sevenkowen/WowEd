@@ -13,7 +13,7 @@ defineProps<{
 <template>
   <div
     v-if="show"
-    class="pointer-events-none absolute inset-x-0 z-[40] flex -translate-y-1/2 items-center"
+    class="pointer-events-none absolute inset-x-0 z-[10] flex -translate-y-1/2 items-center"
     :style="{ top: `${topPercent}%` }"
     role="presentation"
     :aria-label="`Hora actual: ${label}`"

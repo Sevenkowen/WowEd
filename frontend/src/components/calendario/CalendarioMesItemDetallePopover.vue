@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   Bars3BottomLeftIcon,
   CalendarIcon,
-  EllipsisVerticalIcon,
   LockClosedIcon,
+  PencilIcon,
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/vue/24/outline'
@@ -16,6 +16,7 @@ import { taskCuadranteOf, taskTipoOf } from '@/data/calendarioTareaOptions'
 import { tasksLinkedToEvent } from '@/utils/calendarioTaskLinks'
 import { eventColorSquareClass } from '@/utils/calendarioEventStyles'
 import { taskDisplayTitle } from '@/utils/calendarioTaskStyles'
+import { isCalendarModifyAllowed } from '@/utils/calendarioDates'
 import { positionBesideAnchor } from '@/utils/calendarioPopoverPosition'
 import type { CalendarioDetalle } from '@/components/calendario/CalendarioItemDetalleDialog.vue'
 
@@ -30,15 +31,29 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
+  edit: [detalle: CalendarioDetalle]
+  deleted: []
   'view-event': [eventId: string]
 }>()
 
-const { isUserEvent, porFecha: eventosPorFecha } = useCalendarioEscolarEvents()
-const { tareasDelDia } = useCalendarioEscolarTasks()
+const { isUserEvent, porFecha: eventosPorFecha, deleteEvent } = useCalendarioEscolarEvents()
+const { tareasDelDia, deleteTask } = useCalendarioEscolarTasks()
+
+const confirmDelete = ref(false)
+const deleting = ref(false)
+const deleteError = ref('')
 
 const isEvent = computed(() => detalle.value?.type === 'event')
 const eventDetail = computed(() => (detalle.value?.type === 'event' ? detalle.value.event : null))
 const taskDetail = computed(() => (detalle.value?.type === 'task' ? detalle.value.task : null))
+
+const canModify = computed(() => {
+  if (!detalle.value) return false
+  if (detalle.value.type === 'task') {
+    return isCalendarModifyAllowed(detalle.value.task.date)
+  }
+  return isCalendarModifyAllowed(detalle.value.event.datetime.slice(0, 10))
+})
 
 const title = computed(() => {
   if (!detalle.value) return ''
@@ -72,8 +87,18 @@ const panelStyle = computed(() => {
   }
 })
 
+watch(
+  () => detalle.value,
+  () => {
+    confirmDelete.value = false
+    deleteError.value = ''
+  },
+)
+
 function close() {
   open.value = false
+  confirmDelete.value = false
+  deleteError.value = ''
   emit('close')
 }
 
@@ -112,6 +137,43 @@ function viewLinkedEvent() {
   detalle.value = { type: 'event', event: ev }
   emit('view-event', ev.id)
 }
+
+function startEdit() {
+  if (!detalle.value || !canModify.value) return
+  emit('edit', detalle.value)
+  close()
+}
+
+async function onDelete() {
+  if (!detalle.value || !canModify.value || deleting.value) return
+  if (!confirmDelete.value) {
+    confirmDelete.value = true
+    deleteError.value = ''
+    return
+  }
+
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    const ok =
+      detalle.value.type === 'task'
+        ? await Promise.resolve(deleteTask(detalle.value.task.id))
+        : await Promise.resolve(deleteEvent(detalle.value.event.id))
+    if (!ok) {
+      deleteError.value =
+        detalle.value.type === 'task'
+          ? 'No se pudo eliminar la tarea.'
+          : 'No se pudo eliminar el evento.'
+      confirmDelete.value = false
+      return
+    }
+    detalle.value = null
+    emit('deleted')
+    close()
+  } finally {
+    deleting.value = false
+  }
+}
 </script>
 
 <template>
@@ -126,19 +188,23 @@ function viewLinkedEvent() {
       >
         <div class="flex items-center justify-end gap-0.5 px-3 pt-3">
           <button
-            v-if="isEvent && eventDetail && isUserEvent(eventDetail.id)"
+            v-if="canModify"
             type="button"
             class="flex size-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/10"
-            aria-label="Eliminar evento"
+            aria-label="Editar"
+            @click="startEdit"
           >
-            <TrashIcon class="size-5" aria-hidden="true" />
+            <PencilIcon class="size-5" aria-hidden="true" />
           </button>
           <button
+            v-if="canModify"
             type="button"
-            class="flex size-9 items-center justify-center rounded-full text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-white/10"
-            aria-label="Más opciones"
+            class="flex size-9 items-center justify-center rounded-full text-gray-500 hover:bg-red-50 hover:text-red-600 dark:text-gray-400 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+            :aria-label="confirmDelete ? 'Confirmar eliminación' : 'Eliminar'"
+            :disabled="deleting"
+            @click="onDelete"
           >
-            <EllipsisVerticalIcon class="size-5" aria-hidden="true" />
+            <TrashIcon class="size-5" aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -171,6 +237,14 @@ function viewLinkedEvent() {
               </p>
             </div>
           </div>
+
+          <p
+            v-if="confirmDelete"
+            class="mt-4 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300"
+          >
+            ¿Eliminar {{ isEvent ? 'este evento' : 'esta tarea' }}? Tocá el ícono de papelera otra vez para confirmar.
+          </p>
+          <p v-if="deleteError" class="mt-3 text-sm text-red-600 dark:text-red-400">{{ deleteError }}</p>
 
           <ul class="mt-6 space-y-4 text-sm text-[#3c4043] dark:text-gray-200">
             <template v-if="eventDetail">

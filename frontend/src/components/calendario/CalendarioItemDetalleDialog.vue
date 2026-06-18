@@ -11,7 +11,9 @@ import {
   CalendarDaysIcon,
   CheckIcon,
   ClockIcon,
+  PencilIcon,
   TagIcon,
+  TrashIcon,
   XMarkIcon,
 } from '@heroicons/vue/20/solid'
 import type { CalEvent } from '@/data/calendarioEscolarDemo'
@@ -27,6 +29,10 @@ import {
   sidebarEventTimeClass,
 } from '@/utils/calendarioEventStyles'
 import { taskDisplayTitle } from '@/utils/calendarioTaskStyles'
+import { isCalendarModifyAllowed } from '@/utils/calendarioDates'
+import { gcalPrimaryBtn } from '@/utils/calendarioGoogleTheme'
+import CalendarioTareaDetalleDialog from '@/components/calendario/CalendarioTareaDetalleDialog.vue'
+import CalendarioEventoDetalleDialog from '@/components/calendario/CalendarioEventoDetalleDialog.vue'
 
 export type CalendarioDetalle =
   | { type: 'event'; event: CalEvent }
@@ -41,13 +47,22 @@ const detalle = defineModel<CalendarioDetalle | null>('detalle', { default: null
 
 const emit = defineEmits<{
   'view-event': [eventId: string]
+  changed: []
 }>()
 
-const { porFecha: eventosPorFecha } = useCalendarioEscolarEvents()
-const { tareasDelDia, setCompletada } = useCalendarioEscolarTasks()
+const { porFecha: eventosPorFecha, deleteEvent } = useCalendarioEscolarEvents()
+const { tareasDelDia, setCompletada, deleteTask } = useCalendarioEscolarTasks()
 
 const eventTab = ref<EventTab>('detalles')
 const togglingTaskId = ref<string | null>(null)
+const confirmDelete = ref(false)
+const deleting = ref(false)
+const deleteError = ref('')
+
+const taskEditOpen = ref(false)
+const taskEditId = ref<string | null>(null)
+const eventEditOpen = ref(false)
+const eventEditId = ref<string | null>(null)
 
 const eventDetail = computed(() =>
   detalle.value?.type === 'event' ? detalle.value.event : null,
@@ -115,10 +130,20 @@ const eventTabs = computed(() => [
   { id: 'tareas' as const, label: `Tareas (${eventLinkedTasks.value.length})` },
 ])
 
+const canModify = computed(() => {
+  if (!detalle.value) return false
+  if (detalle.value.type === 'task') {
+    return isCalendarModifyAllowed(detalle.value.task.date)
+  }
+  return isCalendarModifyAllowed(detalle.value.event.datetime.slice(0, 10))
+})
+
 watch(
   () => detalle.value,
   () => {
     eventTab.value = 'detalles'
+    confirmDelete.value = false
+    deleteError.value = ''
   },
 )
 
@@ -146,6 +171,60 @@ function openLinkedTask(task: CalTask) {
 
 function close() {
   open.value = false
+  confirmDelete.value = false
+  deleteError.value = ''
+}
+
+function startEdit() {
+  if (!detalle.value || !canModify.value) return
+  if (detalle.value.type === 'task') {
+    taskEditId.value = detalle.value.task.id
+    taskEditOpen.value = true
+  } else {
+    eventEditId.value = detalle.value.event.id
+    eventEditOpen.value = true
+  }
+  open.value = false
+}
+
+function onEditSaved() {
+  emit('changed')
+}
+
+function onEditDeleted() {
+  emit('changed')
+  detalle.value = null
+}
+
+async function onDelete() {
+  if (!detalle.value || !canModify.value || deleting.value) return
+  if (!confirmDelete.value) {
+    confirmDelete.value = true
+    deleteError.value = ''
+    return
+  }
+
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    const ok =
+      detalle.value.type === 'task'
+        ? await Promise.resolve(deleteTask(detalle.value.task.id))
+        : await Promise.resolve(deleteEvent(detalle.value.event.id))
+    if (!ok) {
+      deleteError.value =
+        detalle.value.type === 'task'
+          ? 'No se pudo eliminar la tarea.'
+          : 'No se pudo eliminar el evento.'
+      confirmDelete.value = false
+      return
+    }
+    detalle.value = null
+    emit('changed')
+    close()
+  } finally {
+    deleting.value = false
+  }
 }
 
 function viewLinkedEvent() {
@@ -467,13 +546,46 @@ async function toggleTaskDone(task: CalTask) {
               </div>
 
               <div class="border-t border-gray-200 bg-white px-5 py-3 dark:border-white/10 dark:bg-gray-900">
-                <button
-                  type="button"
-                  class="w-full rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900/40 dark:text-white dark:hover:bg-white/5"
-                  @click="close"
-                >
-                  Cerrar
-                </button>
+                <p v-if="deleteError" class="mb-2 text-sm text-red-600 dark:text-red-400">{{ deleteError }}</p>
+                <div class="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <button
+                    v-if="canModify"
+                    type="button"
+                    class="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                    :disabled="deleting"
+                    @click="onDelete"
+                  >
+                    <TrashIcon class="size-4" aria-hidden="true" />
+                    {{
+                      deleting
+                        ? 'Eliminando…'
+                        : confirmDelete
+                          ? '¿Confirmar eliminación?'
+                          : 'Eliminar'
+                    }}
+                  </button>
+                  <div class="flex gap-2 sm:ml-auto">
+                    <button
+                      v-if="canModify"
+                      type="button"
+                      class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 sm:flex-none dark:border-white/10 dark:text-white dark:hover:bg-white/5"
+                      @click="startEdit"
+                    >
+                      <PencilIcon class="size-4" aria-hidden="true" />
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      :class="[
+                        'flex-1 rounded-xl px-4 py-2 text-sm font-semibold shadow-sm sm:flex-none',
+                        canModify ? 'border border-gray-200 bg-white text-gray-900 hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900/40 dark:text-white dark:hover:bg-white/5' : gcalPrimaryBtn,
+                      ]"
+                      @click="close"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
               </div>
             </DialogPanel>
           </TransitionChild>
@@ -481,4 +593,17 @@ async function toggleTaskDone(task: CalTask) {
       </div>
     </Dialog>
   </TransitionRoot>
+
+  <CalendarioTareaDetalleDialog
+    v-model:open="taskEditOpen"
+    v-model:task-id="taskEditId"
+    @saved="onEditSaved"
+    @deleted="onEditDeleted"
+  />
+  <CalendarioEventoDetalleDialog
+    v-model:open="eventEditOpen"
+    v-model:event-id="eventEditId"
+    @saved="onEditSaved"
+    @deleted="onEditDeleted"
+  />
 </template>

@@ -75,3 +75,71 @@ export function buildEventDatetime(dateYmd: string, time: string): string {
   const [h, m] = time.split(':')
   return `${dateYmd}T${String(h).padStart(2, '0')}:${String(m ?? '00').padStart(2, '0')}`
 }
+
+/** Aplica nuevo fin horario a un evento (actualización optimista en UI). */
+export function resizeCalEvent(source: CalEvent, date: string, newEndTime: string): CalEvent {
+  if (isAllDayEvent(source)) {
+    return { ...source, datetime: `${date}T00:00` }
+  }
+  const startMin = minutesFromEvent(source)
+  if (startMin === null) return source
+  let endMin = parseTimeToMinutes(newEndTime)
+  if (endMin <= startMin) endMin = startMin + 30
+  const startTime = formatTimeLabel(Math.floor(startMin / 60) % 24, startMin % 60)
+  const endTime = formatTimeLabel(Math.floor(endMin / 60) % 24, endMin % 60)
+  return {
+    ...source,
+    datetime: buildEventDatetime(date, startTime),
+    endDatetime: buildEventDatetime(date, endTime),
+    time: formatEventTimeRange(startTime, endTime),
+  }
+}
+
+/** Aplica nuevo fin horario a una tarea (actualización optimista en UI). */
+export function resizeCalTask(source: CalTask, newEndTime: string): CalTask {
+  if (!source.time) return source
+  const startMin = parseTimeToMinutes(source.time)
+  let endMin = parseTimeToMinutes(newEndTime)
+  if (endMin <= startMin) endMin = startMin + 30
+  const endTime = formatTimeLabel(Math.floor(endMin / 60) % 24, endMin % 60)
+  return { ...source, endTime }
+}
+
+/** Mueve un evento a otra fecha/hora conservando la duración (actualización optimista en UI). */
+export function moveCalEvent(source: CalEvent, newDate: string, newStartTime: string): CalEvent {
+  if (isAllDayEvent(source)) {
+    return {
+      ...source,
+      datetime: `${newDate}T00:00`,
+      time: ALL_DAY_EVENT_LABEL,
+      endDatetime: undefined,
+    }
+  }
+  const startMin = minutesFromEvent(source)
+  const duration =
+    startMin === null
+      ? 60
+      : Math.max(30, endMinutesFromEvent(source) - startMin)
+  const newStartMin = parseTimeToMinutes(newStartTime)
+  const endMin = newStartMin + duration
+  const endTime = formatTimeLabel(Math.floor(endMin / 60) % 24, endMin % 60)
+
+  return {
+    ...source,
+    datetime: buildEventDatetime(newDate, newStartTime),
+    endDatetime: buildEventDatetime(newDate, endTime),
+    time: formatEventTimeRange(newStartTime, endTime),
+  }
+}
+
+/** Mueve una tarea a otra fecha/hora (actualización optimista en UI). */
+export function moveCalTask(source: CalTask, newDate: string, newTime: string | null): CalTask {
+  let eventId = source.eventId ?? null
+  if (eventId && newDate !== source.date) eventId = null
+  return {
+    ...source,
+    date: newDate,
+    eventId,
+    time: newTime?.trim() || undefined,
+  }
+}

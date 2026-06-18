@@ -62,7 +62,7 @@ import {
   calendarioHourCount,
   calendarioHourLabel,
 } from '@/utils/calendarioGridConstants'
-import { timedGridItemLiClass } from '@/utils/calendarioTimedGridStyles'
+import { timedGridItemLiClass, timedGridResizingClass, timedGridSyncingClass } from '@/utils/calendarioTimedGridStyles'
 
 defineOptions({ name: 'CalendarioEscolarWeek' })
 
@@ -96,8 +96,17 @@ function dateForDragItem(item: CalendarioDragItem): string | null {
   return weekDays.value[item.dayIndex]?.date ?? null
 }
 
-const { dragging, hover, beginDrag, isDraggingItem, isHoverCell, showDragPreview, justDragged } =
-  useCalendarioGridDrag({
+const {
+  dragging,
+  hover,
+  beginDrag,
+  isDraggingItem,
+  isSyncingItem: isSyncingDragItem,
+  pendingDropStartTime,
+  isHoverCell,
+  showDragPreview,
+  justDragged,
+} = useCalendarioGridDrag({
   gridRef,
   dayCount: 7,
   gridRows: GRID_ROWS,
@@ -107,11 +116,11 @@ const { dragging, hover, beginDrag, isDraggingItem, isHoverCell, showDragPreview
     const date = dateForDragItem(item)
     return !!date && !isDateBeforeToday(date)
   },
-  onDrop: (item, date, startTime) => {
-    if (item.kind === 'event') moveEvent(item.id, date, startTime)
-    else moveTask(item.id, date, startTime)
+  onDrop: async (item, date, startTime) => {
+    if (item.kind === 'event') await moveEvent(item.id, date, startTime)
+    else await moveTask(item.id, date, startTime)
   },
-  })
+})
 
 function dragItemClass(item: CalendarioDragItem, extra = ''): string {
   if (isDraggingItem(item)) {
@@ -376,6 +385,8 @@ const {
   beginResize: beginTaskResize,
   previewSpan: taskPreviewSpan,
   isResizingItem: isResizingTask,
+  isSyncingItem: isSyncingTask,
+  pendingEndTime: taskPendingEndTime,
   preview: taskResizePreview,
   justResized: justTaskResized,
 } = useCalendarioGridResize({
@@ -396,6 +407,8 @@ const {
   beginResize: beginEventResize,
   previewSpan: eventPreviewSpan,
   isResizingItem: isResizingEvent,
+  isSyncingItem: isSyncingEvent,
+  pendingEndTime: eventPendingEndTime,
   preview: eventResizePreview,
   justResized: justEventResized,
 } = useCalendarioGridResize({
@@ -435,7 +448,26 @@ function eventSpan(ev: WeekTimedEvent): number {
   return eventPreviewSpan(ev.id, ev.gridSpan)
 }
 
+function timedGridBlockStateClass(
+  isResizing: boolean,
+  isSyncingResize: boolean,
+  isSyncingDrag: boolean,
+): string {
+  if (isResizing) return timedGridResizingClass()
+  if (isSyncingResize || isSyncingDrag) return timedGridSyncingClass()
+  return ''
+}
+
 function taskTimeLabel(task: CalTask): string {
+  const pendingStart = pendingDropStartTime(task.id, 'task')
+  if (pendingStart && task.time) {
+    const span = gridSpanFromTask(task)
+    return dragPreviewTimeLabel(span, pendingStart)
+  }
+  const pendingEnd = taskPendingEndTime(task.id)
+  if (pendingEnd && task.time) {
+    return formatEventTimeRange(task.time, pendingEnd)
+  }
   if (isResizingTask(task.id) && taskResizePreview.value && task.time) {
     return formatEventTimeRange(task.time, taskResizePreview.value.endTime)
   }
@@ -457,6 +489,15 @@ const hasWeekAllDayEvents = computed(() =>
 )
 
 function eventTimeLabel(ev: CalEvent): string {
+  const pendingStart = pendingDropStartTime(ev.id, 'event')
+  if (pendingStart) {
+    const span = gridSpanFromEvent(ev)
+    return dragPreviewTimeLabel(span, pendingStart)
+  }
+  const pendingEnd = eventPendingEndTime(ev.id)
+  if (pendingEnd) {
+    return formatEventTimeRange(eventStartTime(ev), pendingEnd)
+  }
   if (isResizingEvent(ev.id) && eventResizePreview.value) {
     return formatEventTimeRange(eventStartTime(ev), eventResizePreview.value.endTime)
   }
@@ -593,7 +634,7 @@ function linkedEventName(eventId: string): string | null {
         >
           <div ref="scrollContainerRef" class="gcal-scroll-outside h-full min-h-0">
           <div class="min-w-[40rem]">
-            <div class="sticky top-0 z-30" :class="gcalSurface">
+            <div class="sticky top-0 z-50" :class="gcalSurface">
               <div
                 class="grid divide-x text-sm/6 text-gray-500 dark:divide-white/10"
                 :class="[WEEK_GRID_COLS, gcalBorder, 'border-b']"
@@ -784,7 +825,7 @@ function linkedEventName(eventId: string): string | null {
               :class="[
                 timedGridItemLiClass(),
                 isDraggingItem(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow)) ? 'z-20' : '',
-                isResizingTask(task.id) ? 'z-30' : '',
+                isResizingTask(task.id) || isSyncingTask(task.id) || isSyncingDragItem(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow)) ? 'z-30' : '',
               ]"
               :style="{ gridRow: `${task.gridRow} / span ${taskSpan(task)}`, gridColumnStart: task.colStart }"
             >
@@ -793,7 +834,11 @@ function linkedEventName(eventId: string): string | null {
                   timedTaskBlockClass(),
                   dragItemClass(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow)),
                   'group text-left',
-                  isResizingTask(task.id) ? 'ring-2 ring-white/50' : '',
+                  timedGridBlockStateClass(
+                    isResizingTask(task.id),
+                    isSyncingTask(task.id),
+                    isSyncingDragItem(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow)),
+                  ),
                 ]"
                 @pointerdown="onItemPointerDown(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow), $event)"
                 @click="!justDragged && !justResized && openTaskDetail(task)"
@@ -801,7 +846,7 @@ function linkedEventName(eventId: string): string | null {
                 <p :class="timedTaskTitleClass()">{{ taskDisplayTitle(task) }}</p>
                 <p :class="timedTaskTimeClass()">{{ taskTimeLabel(task) }}</p>
                 <div
-                  v-if="!isDateBeforeToday(task.date) && !isDraggingItem(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow))"
+                  v-if="!isDateBeforeToday(task.date) && !isDraggingItem(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow)) && !isSyncingTask(task.id) && !isSyncingDragItem(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow))"
                   data-cal-resize
                   :class="timedTaskResizeHandleClass()"
                   aria-label="Ajustar duración de la tarea"
@@ -815,7 +860,7 @@ function linkedEventName(eventId: string): string | null {
               :class="[
                 timedGridItemLiClass(),
                 isDraggingItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow)) ? 'z-20' : '',
-                isResizingEvent(ev.id) ? 'z-30' : '',
+                isResizingEvent(ev.id) || isSyncingEvent(ev.id) || isSyncingDragItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow)) ? 'z-30' : '',
               ]"
               :style="{ gridRow: `${ev.gridRow} / span ${eventSpan(ev)}`, gridColumnStart: ev.colStart }"
             >
@@ -825,7 +870,11 @@ function linkedEventName(eventId: string): string | null {
                   dragEventClass(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow)),
                   'group flex min-h-0 flex-col',
                   eventSpan(ev) === 1 ? 'justify-center' : '',
-                  isResizingEvent(ev.id) ? 'ring-2 ring-white/50' : '',
+                  timedGridBlockStateClass(
+                    isResizingEvent(ev.id),
+                    isSyncingEvent(ev.id),
+                    isSyncingDragItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow)),
+                  ),
                 ]"
                 :style="eventTypeBgStyleFromEvent(ev)"
                 @pointerdown="onItemPointerDown(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow), $event)"
@@ -852,7 +901,7 @@ function linkedEventName(eventId: string): string | null {
                   </template>
                 </CalendarioEventTasksInline>
                 <div
-                  v-if="!isDateBeforeToday(ev.date) && !isDraggingItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow))"
+                  v-if="!isDateBeforeToday(ev.date) && !isDraggingItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow)) && !isSyncingEvent(ev.id) && !isSyncingDragItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow))"
                   data-cal-resize
                   :class="timedEventResizeHandleClass()"
                   aria-label="Ajustar duración del evento"

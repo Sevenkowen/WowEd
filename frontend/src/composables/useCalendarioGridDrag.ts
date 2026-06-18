@@ -21,7 +21,11 @@ export interface CalendarioGridDragConfig {
   timeColRem?: number
   getDateForDayIndex: (dayIndex: number) => string | null
   canDrag?: (item: CalendarioDragItem) => boolean
-  onDrop: (item: CalendarioDragItem, date: string, startTime: string) => void
+  onDrop: (
+    item: CalendarioDragItem,
+    date: string,
+    startTime: string,
+  ) => void | boolean | Promise<void | boolean>
 }
 
 export interface CalendarioDragHover {
@@ -38,6 +42,11 @@ export interface CalendarioDragOrigin {
   startTime: string
 }
 
+export interface CalendarioDragPendingDrop {
+  item: CalendarioDragItem
+  target: CalendarioDragHover
+}
+
 const DRAG_THRESHOLD_PX = 5
 
 export function useCalendarioGridDrag(config: CalendarioGridDragConfig) {
@@ -47,6 +56,7 @@ export function useCalendarioGridDrag(config: CalendarioGridDragConfig) {
   const dragging = ref<CalendarioDragItem | null>(null)
   const hover = ref<CalendarioDragHover | null>(null)
   const dragOrigin = ref<CalendarioDragOrigin | null>(null)
+  const pendingDrop = ref<CalendarioDragPendingDrop | null>(null)
   const pointerId = ref<number | null>(null)
   const justDragged = ref(false)
 
@@ -126,32 +136,48 @@ export function useCalendarioGridDrag(config: CalendarioGridDragConfig) {
     hover.value = pointerToHover(e.clientX, e.clientY)
   }
 
-  function onPointerUp(e: PointerEvent) {
-    if (pointerId.value !== e.pointerId) return
-
-    const item = dragging.value ?? pending
-    const target = hover.value
-
-    if (dragging.value && item && target && isCalendarSlotCreateAllowed(target.date, target.startTime)) {
-      config.onDrop(item, target.date, target.startTime)
-      justDragged.value = true
-      window.setTimeout(() => {
-        justDragged.value = false
-      }, 200)
-    }
-
-    dragging.value = null
-    pending = null
-    hover.value = null
-    dragOrigin.value = null
-    pointerId.value = null
-
+  function clearPointerListeners() {
     window.removeEventListener('pointermove', onPointerMove)
     window.removeEventListener('pointerup', onPointerUp)
     window.removeEventListener('pointercancel', onPointerUp)
   }
 
+  async function onPointerUp(e: PointerEvent) {
+    if (pointerId.value !== e.pointerId) return
+
+    const item = dragging.value ?? pending
+    const target = hover.value
+    const didDrag = !!dragging.value
+
+    clearPointerListeners()
+    pointerId.value = null
+    pending = null
+    dragging.value = null
+    hover.value = null
+    dragOrigin.value = null
+
+    if (
+      didDrag &&
+      item &&
+      target &&
+      isCalendarSlotCreateAllowed(target.date, target.startTime)
+    ) {
+      pendingDrop.value = { item, target }
+      justDragged.value = true
+
+      try {
+        await Promise.resolve(config.onDrop(item, target.date, target.startTime))
+      } finally {
+        pendingDrop.value = null
+        window.setTimeout(() => {
+          justDragged.value = false
+        }, 200)
+      }
+    }
+  }
+
   function beginDrag(item: CalendarioDragItem, e: PointerEvent) {
+    if (pendingDrop.value) return
     if (config.canDrag && !config.canDrag(item)) return
     if (e.button !== 0) return
 
@@ -168,6 +194,18 @@ export function useCalendarioGridDrag(config: CalendarioGridDragConfig) {
 
   function isDraggingItem(item: CalendarioDragItem): boolean {
     return dragging.value?.kind === item.kind && dragging.value.id === item.id
+  }
+
+  function isSyncingItem(item: CalendarioDragItem): boolean {
+    const pending = pendingDrop.value
+    if (!pending) return false
+    return pending.item.kind === item.kind && pending.item.id === item.id
+  }
+
+  function pendingDropStartTime(id: string, kind: CalendarioDragKind): string | null {
+    const pending = pendingDrop.value
+    if (!pending || pending.item.kind !== kind || pending.item.id !== id) return null
+    return pending.target.startTime
   }
 
   function isAtDragOrigin(): boolean {
@@ -188,22 +226,23 @@ export function useCalendarioGridDrag(config: CalendarioGridDragConfig) {
   }
 
   function isHoverCell(dayIndex: number, gridRow: number): boolean {
-    return hover.value?.dayIndex === dayIndex && hover.value.gridRow === gridRow
+    return hover.value?.dayIndex === dayIndex && hover.value?.gridRow === gridRow
   }
 
   onBeforeUnmount(() => {
-    window.removeEventListener('pointermove', onPointerMove)
-    window.removeEventListener('pointerup', onPointerUp)
-    window.removeEventListener('pointercancel', onPointerUp)
+    clearPointerListeners()
   })
 
   return {
     dragging,
     hover,
     dragOrigin,
+    pendingDrop,
     justDragged,
     beginDrag,
     isDraggingItem,
+    isSyncingItem,
+    pendingDropStartTime,
     isHoverCell,
     isAtDragOrigin,
     showDragPreview,
