@@ -14,12 +14,21 @@ fi
 echo "==> git pull"
 git pull origin main
 
-echo "==> docker compose build & up"
-docker compose up -d --build
+if docker compose version >/dev/null 2>&1; then
+  COMPOSE="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+  COMPOSE="docker-compose"
+else
+  echo "ERROR: instalá Docker Compose (docker compose o docker-compose)"
+  exit 1
+fi
+
+echo "==> docker compose build & up ($COMPOSE)"
+$COMPOSE up -d --build
 
 echo "==> esperando API healthy..."
 for i in $(seq 1 30); do
-  if docker compose exec -T api python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')" 2>/dev/null; then
+  if $COMPOSE exec -T api python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')" 2>/dev/null; then
     break
   fi
   sleep 2
@@ -32,6 +41,6 @@ curl -sf "http://127.0.0.1:${HTTP_PORT:-80}/api/health/db-schema" | head -c 400 
 echo ""
 
 echo "==> contenedores"
-docker compose ps
+$COMPOSE ps
 
 echo "Deploy completado."
