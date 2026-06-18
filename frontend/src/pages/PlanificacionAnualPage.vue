@@ -20,19 +20,19 @@ import CalendarioEscolarDay from '@/components/calendario/CalendarioEscolarDay.v
 import CalendarioEscolarYear from '@/components/calendario/CalendarioEscolarYear.vue'
 import CalendarioEscolarWeek from '@/components/calendario/CalendarioEscolarWeek.vue'
 import CalendarioEscolarTareas from '@/components/calendario/CalendarioEscolarTareas.vue'
+import CalendarioCatalogosDialog from '@/components/calendario/CalendarioCatalogosDialog.vue'
 import KtInputModeDatePicker from '@/components/KtInputModeDatePicker.vue'
 import KtInputModeTimePicker from '@/components/KtInputModeTimePicker.vue'
 import type { CalendarioContentMode, CalendarioDisplayView } from '@/utils/calendarioDates'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
 import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
+import { useCalendarioCatalogs } from '@/composables/useCalendarioCatalogs'
 import {
   DEFAULT_TASK_CUADRANTE,
-  DEFAULT_TASK_TIPO,
   taskCuadrantes,
-  taskTipos,
   type TaskCuadranteOption,
-  type TaskTipoOption,
 } from '@/data/calendarioTareaOptions'
+import type { CalendarioCatalogItem } from '@/data/calendarioCatalogDefaults'
 import { parseTimeToMinutes, formatTimeLabel } from '@/utils/calendarioEventTime'
 import {
   CALENDAR_PAST_DATE_MESSAGE,
@@ -80,7 +80,7 @@ watch(calendarioDisplayView, () => {
   }
 })
 
-const { addEvent: addCalendarioEvent, addEventWithRecurrence, eventosDelDia, reload: reloadEventos } = useCalendarioEscolarEvents()
+const { addEvent: addCalendarioEvent, addEventWithRecurrence, eventosDelDia, porFecha: eventosPorFecha, reload: reloadEventos } = useCalendarioEscolarEvents()
 const { addTask: addCalendarioTask, addTaskWithRecurrence, reload: reloadTareas } = useCalendarioEscolarTasks()
 
 const leyenda = [
@@ -93,19 +93,15 @@ const leyenda = [
   { label: 'Tarea', class: 'bg-violet-500' },
 ] as const
 
+const { eventTypeOptions, taskTipoOptions, defaultEventType, defaultTaskTipo } = useCalendarioCatalogs()
+
 const addEventOpen = ref(false)
 const minCreateDate = computed(() => todayYmd())
 const addEventDate = ref<string>(todayYmd())
 const addEventTitle = ref('')
 const addEventDescription = ref('')
-type EventTypeOption = { id: number; name: 'Evento Escolar' | 'Jornada Institucional' | 'Fecha Administrativa' | 'Otro' }
-const eventTypes: EventTypeOption[] = [
-  { id: 1, name: 'Evento Escolar' },
-  { id: 2, name: 'Jornada Institucional' },
-  { id: 3, name: 'Fecha Administrativa' },
-  { id: 4, name: 'Otro' },
-]
-const addEventType = ref<EventTypeOption>(eventTypes[0])
+const catalogosOpen = ref(false)
+const addEventType = ref<CalendarioCatalogItem>(defaultEventType.value)
 const addEventStartTime = ref('09:00')
 const addEventEndTime = ref('10:00')
 const addEventAllDay = ref(false)
@@ -150,7 +146,7 @@ function openAddEvent(date?: string | null, startTime?: string | null) {
   addEventDate.value = resolveCreateDate(date)
   addEventTitle.value = ''
   addEventDescription.value = ''
-  addEventType.value = eventTypes[0]
+  addEventType.value = defaultEventType.value
   addEventRecurrence.value = recurrenceOptionsForDate(addEventDate.value)[0]
   addEventFormError.value = ''
   if (startTime) {
@@ -215,8 +211,9 @@ async function saveAddEvent() {
     } else {
       created = await Promise.resolve(addEventWithRecurrence(payload))
     }
-  } catch {
-    addEventFormError.value = 'No se pudo guardar el evento. Revisá la conexión con el servidor.'
+  } catch (e) {
+    addEventFormError.value =
+      e instanceof Error ? e.message : 'No se pudo guardar el evento. Revisá la conexión con el servidor.'
     return
   }
   if (created.length === 0) {
@@ -225,6 +222,7 @@ async function saveAddEvent() {
   }
   selectedDay.value = addEventDate.value
   addEventOpen.value = false
+  await refreshCalendario()
 }
 
 const STANDALONE_TASK_LINK_ID = '__standalone__'
@@ -239,7 +237,7 @@ const addTaskRecurrence = ref<RecurrenceOption>({ id: 'none', label: 'No se repi
 const addTaskTitle = ref('')
 const addTaskDescription = ref('')
 const addTaskEventLink = ref<TaskLinkOption>({ id: STANDALONE_TASK_LINK_ID, name: 'Tarea suelta (sin vincular a evento)' })
-const addTaskTipo = ref<TaskTipoOption>(DEFAULT_TASK_TIPO)
+const addTaskTipo = ref<CalendarioCatalogItem>(defaultTaskTipo.value)
 const addTaskCuadrante = ref<TaskCuadranteOption>(DEFAULT_TASK_CUADRANTE)
 const addTaskFormError = ref('')
 
@@ -294,14 +292,15 @@ watch(addTaskDate, () => {
   }
 })
 
-function openAddTask(date?: string | null, startTime?: string | null) {
+async function openAddTask(date?: string | null, startTime?: string | null) {
   const requested = date ?? selectedDay.value ?? minCreateDate.value
   if (!isCalendarSlotCreateAllowed(requested, startTime)) return
+  await Promise.resolve(reloadEventos())
   addTaskDate.value = resolveCreateDate(date)
   addTaskTitle.value = ''
   addTaskDescription.value = ''
   addTaskEventLink.value = taskLinkOptions.value[0]
-  addTaskTipo.value = DEFAULT_TASK_TIPO
+  addTaskTipo.value = defaultTaskTipo.value
   addTaskCuadrante.value = DEFAULT_TASK_CUADRANTE
   addTaskFormError.value = ''
   addTaskRecurrence.value = recurrenceOptionsForDate(addTaskDate.value)[0]
@@ -336,6 +335,17 @@ async function saveAddTask() {
   }
   const eventId =
     addTaskEventLink.value.id === STANDALONE_TASK_LINK_ID ? null : addTaskEventLink.value.id
+
+  let taskDate = addTaskDate.value
+  if (eventId) {
+    for (const [date, events] of Object.entries(eventosPorFecha.value)) {
+      if (events.some((e) => String(e.id) === String(eventId))) {
+        taskDate = date
+        break
+      }
+    }
+  }
+
   const scheduled = addTaskIsStandalone.value && !addTaskAllDay.value
   if (scheduled && parseTimeToMinutes(addTaskEndTime.value) <= parseTimeToMinutes(addTaskTime.value)) {
     addTaskFormError.value = 'La hora de fin debe ser posterior a la hora de inicio.'
@@ -343,7 +353,7 @@ async function saveAddTask() {
   }
   if (
     !isCalendarSlotCreateAllowed(
-      addTaskDate.value,
+      taskDate,
       scheduled && !addTaskAllDay.value ? addTaskTime.value : null,
     )
   ) {
@@ -352,7 +362,7 @@ async function saveAddTask() {
     return
   }
   const payload = {
-    date: addTaskDate.value,
+    date: taskDate,
     title,
     description: addTaskDescription.value,
     tipo: addTaskTipo.value.name,
@@ -379,8 +389,9 @@ async function saveAddTask() {
     addTaskFormError.value = 'No se pudo guardar la tarea. Revisá los datos.'
     return
   }
-  selectedDay.value = addTaskDate.value
+  selectedDay.value = taskDate
   addTaskOpen.value = false
+  await refreshCalendario()
 }
 
 async function refreshCalendario(): Promise<void> {
@@ -447,11 +458,13 @@ async function refreshCalendario(): Promise<void> {
       </div>
 
       <div
-        v-if="calendarioContentMode === 'calendario'"
         class="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t px-2 py-1.5 sm:px-3 dark:border-white/10"
         :class="gcalBorder"
       >
-        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+        <div
+          v-if="calendarioContentMode === 'calendario'"
+          class="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1"
+        >
           <span
             v-for="item in leyenda"
             :key="item.label"
@@ -461,15 +474,27 @@ async function refreshCalendario(): Promise<void> {
             {{ item.label }}
           </span>
         </div>
-        <button
-          type="button"
-          class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-white/5"
-        >
-          <ArrowDownTrayIcon class="size-3.5 text-gray-500 dark:text-gray-400" aria-hidden="true" />
-          Exportar
-        </button>
+        <div class="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-white/5"
+            @click="catalogosOpen = true"
+          >
+            Tipos
+          </button>
+          <button
+            v-if="calendarioContentMode === 'calendario'"
+            type="button"
+            class="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-white/5"
+          >
+            <ArrowDownTrayIcon class="size-3.5 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+            Exportar
+          </button>
+        </div>
       </div>
   </div>
+
+  <CalendarioCatalogosDialog v-model:open="catalogosOpen" />
 
   <!-- Dialog: Añadir Evento al Calendario Escolar -->
   <TransitionRoot as="template" :show="addEventOpen">
@@ -652,7 +677,7 @@ async function refreshCalendario(): Promise<void> {
                         >
                           <ListboxOption
                             as="template"
-                            v-for="opt in eventTypes"
+                            v-for="opt in eventTypeOptions"
                             :key="opt.id"
                             :value="opt"
                             v-slot="{ active, selected }"
@@ -892,7 +917,7 @@ async function refreshCalendario(): Promise<void> {
                         >
                           <ListboxOption
                             as="template"
-                            v-for="opt in taskTipos"
+                            v-for="opt in taskTipoOptions"
                             :key="opt.id"
                             :value="opt"
                             v-slot="{ active, selected }"

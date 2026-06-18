@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   Dialog,
   DialogPanel,
@@ -7,24 +7,32 @@ import {
   TransitionChild,
   TransitionRoot,
 } from '@headlessui/vue'
+import {
+  CalendarDaysIcon,
+  CheckIcon,
+  ClockIcon,
+  TagIcon,
+  XMarkIcon,
+} from '@heroicons/vue/20/solid'
 import type { CalEvent } from '@/data/calendarioEscolarDemo'
 import type { CalTask } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
+import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
 import { taskCuadranteOf, taskTipoOf } from '@/data/calendarioTareaOptions'
+import { formatTaskScheduleLabel, tasksLinkedToEvent } from '@/utils/calendarioTaskLinks'
 import {
-  sidebarEventCardClass,
-  sidebarEventDotClass,
+  eventColorSquareClass,
+  eventColorSquareStyle,
+  eventHeaderStyle,
   sidebarEventTimeClass,
 } from '@/utils/calendarioEventStyles'
-import {
-  sidebarTaskCardClass,
-  sidebarTaskDotClass,
-  taskDisplayTitle,
-} from '@/utils/calendarioTaskStyles'
+import { taskDisplayTitle } from '@/utils/calendarioTaskStyles'
 
 export type CalendarioDetalle =
   | { type: 'event'; event: CalEvent }
   | { type: 'task'; task: CalTask }
+
+type EventTab = 'detalles' | 'tareas'
 
 defineOptions({ name: 'CalendarioItemDetalleDialog' })
 
@@ -36,8 +44,10 @@ const emit = defineEmits<{
 }>()
 
 const { porFecha: eventosPorFecha } = useCalendarioEscolarEvents()
+const { tareasDelDia, setCompletada } = useCalendarioEscolarTasks()
 
-const isEvent = computed(() => detalle.value?.type === 'event')
+const eventTab = ref<EventTab>('detalles')
+const togglingTaskId = ref<string | null>(null)
 
 const eventDetail = computed(() =>
   detalle.value?.type === 'event' ? detalle.value.event : null,
@@ -77,20 +87,61 @@ const dateAttr = computed(() => {
     : detalle.value.task.date
 })
 
+const eventHeaderSubtitle = computed(() => {
+  if (!eventDetail.value) return ''
+  const [y, m, d] = eventDetail.value.datetime.slice(0, 10).split('-').map(Number)
+  const dayPart = new Intl.DateTimeFormat('es', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(new Date(y, m - 1, d))
+  const cap = dayPart.charAt(0).toUpperCase() + dayPart.slice(1)
+  return `${cap} · ${eventDetail.value.time}`
+})
+
+const taskHeaderSubtitle = computed(() => {
+  if (!taskDetail.value) return ''
+  return formatTaskScheduleLabel(taskDetail.value)
+})
+
+const eventLinkedTasks = computed(() => {
+  if (!eventDetail.value) return []
+  const date = eventDetail.value.datetime.slice(0, 10)
+  return tasksLinkedToEvent(tareasDelDia(date), eventDetail.value.id)
+})
+
+const eventTabs = computed(() => [
+  { id: 'detalles' as const, label: 'Detalles' },
+  { id: 'tareas' as const, label: `Tareas (${eventLinkedTasks.value.length})` },
+])
+
+watch(
+  () => detalle.value,
+  () => {
+    eventTab.value = 'detalles'
+  },
+)
+
 function eventNameById(eventId: string): string | null {
+  const needle = String(eventId)
   for (const list of Object.values(eventosPorFecha.value)) {
-    const ev = list.find((e) => e.id === eventId)
+    const ev = list.find((e) => String(e.id) === needle)
     if (ev) return ev.name
   }
   return null
 }
 
 function findEventById(eventId: string): CalEvent | null {
+  const needle = String(eventId)
   for (const list of Object.values(eventosPorFecha.value)) {
-    const ev = list.find((e) => e.id === eventId)
+    const ev = list.find((e) => String(e.id) === needle)
     if (ev) return ev
   }
   return null
+}
+
+function openLinkedTask(task: CalTask) {
+  detalle.value = { type: 'task', task }
 }
 
 function close() {
@@ -103,6 +154,16 @@ function viewLinkedEvent() {
   if (!ev) return
   detalle.value = { type: 'event', event: ev }
   emit('view-event', ev.id)
+}
+
+async function toggleTaskDone(task: CalTask) {
+  if (togglingTaskId.value) return
+  togglingTaskId.value = task.id
+  try {
+    await setCompletada(task.id, !task.completed)
+  } finally {
+    togglingTaskId.value = null
+  }
 }
 </script>
 
@@ -134,82 +195,245 @@ function viewLinkedEvent() {
           >
             <DialogPanel
               v-if="detalle"
-              class="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl ring-1 ring-black/5 dark:bg-gray-900 dark:ring-white/10"
+              class="w-full max-w-md overflow-hidden rounded-2xl bg-gray-50 shadow-xl ring-1 ring-black/5 dark:bg-gray-950 dark:ring-white/10"
             >
-              <div class="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4 dark:border-white/10">
-                <div class="min-w-0">
-                  <p
-                    class="text-xs font-semibold tracking-wide uppercase"
-                    :class="isEvent ? 'text-indigo-600 dark:text-indigo-400' : 'text-violet-600 dark:text-violet-400'"
-                  >
-                    {{ isEvent ? 'Evento' : 'Tarea' }}
-                  </p>
-                  <DialogTitle class="mt-1 text-base font-semibold text-gray-900 dark:text-white">
-                    {{ title }}
-                  </DialogTitle>
-                  <p class="mt-1 text-sm capitalize text-gray-600 dark:text-gray-400">
-                    <time v-if="dateAttr" :datetime="dateAttr">{{ dateLabel }}</time>
-                  </p>
-                </div>
+              <!-- Cabecera evento -->
+              <div
+                v-if="eventDetail"
+                :class="['relative px-5 pt-5 pb-4 text-white']"
+                :style="eventHeaderStyle(eventDetail)"
+              >
                 <button
                   type="button"
-                  class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/5 dark:hover:text-gray-200"
+                  class="absolute top-3 right-3 rounded-lg p-1.5 text-white/90 hover:bg-white/15 hover:text-white"
                   @click="close"
                 >
                   <span class="sr-only">Cerrar</span>
-                  ×
+                  <XMarkIcon class="size-5" aria-hidden="true" />
+                </button>
+                <DialogTitle class="pr-8 text-xl font-semibold leading-snug">
+                  {{ eventDetail.name }}
+                </DialogTitle>
+                <p class="mt-1 text-sm text-white/90">
+                  {{ eventHeaderSubtitle }}
+                </p>
+              </div>
+
+              <!-- Cabecera tarea -->
+              <div
+                v-else-if="taskDetail"
+                class="relative bg-violet-600 px-5 pt-5 pb-4 text-white dark:bg-violet-700"
+              >
+                <button
+                  type="button"
+                  class="absolute top-3 right-3 rounded-lg p-1.5 text-white/90 hover:bg-white/15 hover:text-white"
+                  @click="close"
+                >
+                  <span class="sr-only">Cerrar</span>
+                  <XMarkIcon class="size-5" aria-hidden="true" />
+                </button>
+                <p class="text-xs font-semibold tracking-wide text-white/80 uppercase">Tarea</p>
+                <DialogTitle class="mt-0.5 pr-8 text-xl font-semibold leading-snug">
+                  {{ title }}
+                </DialogTitle>
+                <p class="mt-1 text-sm text-white/90">
+                  {{ taskHeaderSubtitle }}
+                </p>
+              </div>
+
+              <!-- Pestañas (solo evento) -->
+              <div
+                v-if="eventDetail"
+                class="flex border-b border-gray-200 bg-white dark:border-white/10 dark:bg-gray-900"
+              >
+                <button
+                  v-for="tab in eventTabs"
+                  :key="tab.id"
+                  type="button"
+                  class="relative flex-1 px-4 py-3 text-sm font-medium transition-colors"
+                  :class="
+                    eventTab === tab.id
+                      ? 'text-indigo-600 dark:text-indigo-400'
+                      : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                  "
+                  @click="eventTab = tab.id"
+                >
+                  {{ tab.label }}
+                  <span
+                    v-if="eventTab === tab.id"
+                    class="absolute inset-x-4 bottom-0 h-0.5 rounded-full bg-indigo-600 dark:bg-indigo-400"
+                    aria-hidden="true"
+                  />
                 </button>
               </div>
 
-              <div class="px-5 py-4">
-                <div
-                  v-if="eventDetail"
-                  :class="sidebarEventCardClass(eventDetail)"
-                >
-                  <div class="flex items-start gap-2.5">
-                    <span :class="[sidebarEventDotClass(eventDetail), 'mt-1.5']" aria-hidden="true" />
-                    <dl class="min-w-0 flex-1 space-y-3 text-sm">
-                      <div>
-                        <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Horario</dt>
-                        <dd :class="sidebarEventTimeClass(eventDetail)">
+              <!-- Cuerpo -->
+              <div class="max-h-[min(60vh,28rem)] overflow-y-auto px-5 py-4">
+                <!-- Evento: pestaña Detalles -->
+                <template v-if="eventDetail && eventTab === 'detalles'">
+                  <h3 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+                    Sobre el evento
+                  </h3>
+                  <dl class="space-y-4 text-sm">
+                    <div class="flex items-start gap-3">
+                      <CalendarDaysIcon class="mt-0.5 size-5 shrink-0 text-gray-400" aria-hidden="true" />
+                      <div class="min-w-0">
+                        <dt class="sr-only">Nombre</dt>
+                        <dd class="font-medium text-gray-900 dark:text-white">{{ eventDetail.name }}</dd>
+                      </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                      <ClockIcon class="mt-0.5 size-5 shrink-0 text-gray-400" aria-hidden="true" />
+                      <div class="min-w-0">
+                        <dt class="sr-only">Horario</dt>
+                        <dd :class="['font-medium', sidebarEventTimeClass(eventDetail)]">
                           <time :datetime="eventDetail.datetime">{{ eventDetail.time }}</time>
                         </dd>
-                      </div>
-                      <div v-if="eventDetail.eventType">
-                        <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Tipo de evento</dt>
-                        <dd class="mt-0.5 font-medium text-gray-900 dark:text-white">
-                          {{ eventDetail.eventType }}
+                        <dd class="mt-0.5 capitalize text-gray-600 dark:text-gray-400">
+                          <time v-if="dateAttr" :datetime="dateAttr">{{ dateLabel }}</time>
                         </dd>
                       </div>
-                      <div>
+                    </div>
+                    <div v-if="eventDetail.eventType" class="flex items-start gap-3">
+                      <span
+                        :class="[eventColorSquareClass(eventDetail), 'mt-1']"
+                        :style="eventColorSquareStyle(eventDetail)"
+                        aria-hidden="true"
+                      />
+                      <div class="min-w-0">
+                        <dt class="sr-only">Tipo</dt>
+                        <dd class="font-medium text-gray-900 dark:text-white">{{ eventDetail.eventType }}</dd>
+                      </div>
+                    </div>
+                    <div v-if="eventDetail.description" class="flex items-start gap-3">
+                      <TagIcon class="mt-0.5 size-5 shrink-0 text-gray-400" aria-hidden="true" />
+                      <div class="min-w-0">
                         <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Descripción</dt>
                         <dd class="mt-0.5 leading-relaxed text-gray-700 dark:text-gray-300">
-                          {{ eventDetail.description || 'Sin descripción.' }}
+                          {{ eventDetail.description }}
                         </dd>
                       </div>
-                    </dl>
-                  </div>
-                </div>
+                    </div>
+                  </dl>
+                </template>
 
-                <div
-                  v-else-if="taskDetail"
-                  :class="sidebarTaskCardClass(!!taskDetail.eventId)"
-                >
-                  <div class="flex items-start gap-2.5">
-                    <span :class="[sidebarTaskDotClass(), 'mt-1.5']" aria-hidden="true" />
-                    <dl class="min-w-0 flex-1 space-y-3 text-sm">
+                <!-- Evento: pestaña Tareas -->
+                <template v-else-if="eventDetail && eventTab === 'tareas'">
+                  <h3 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+                    Tareas asociadas a este evento
+                  </h3>
+                  <ul v-if="eventLinkedTasks.length > 0" class="space-y-3">
+                    <li
+                      v-for="task in eventLinkedTasks"
+                      :key="task.id"
+                      class="rounded-xl border border-violet-500/25 bg-violet-950/20 p-4 dark:border-violet-500/30 dark:bg-violet-950/40"
+                    >
+                      <div class="flex items-start gap-3">
+                        <button
+                          type="button"
+                          class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors"
+                          :class="
+                            task.completed
+                              ? 'border-violet-400 bg-violet-500 text-white'
+                              : 'border-violet-400/70 bg-transparent hover:border-violet-400'
+                          "
+                          :disabled="togglingTaskId === task.id"
+                          :aria-label="task.completed ? 'Marcar pendiente' : 'Marcar completada'"
+                          @click.stop="toggleTaskDone(task)"
+                        >
+                          <CheckIcon v-if="task.completed" class="size-3" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          class="min-w-0 flex-1 text-left"
+                          @click="openLinkedTask(task)"
+                        >
+                          <p
+                            class="font-medium text-gray-900 dark:text-white"
+                            :class="{ 'line-through opacity-60': task.completed }"
+                          >
+                            {{ taskDisplayTitle(task) }}
+                          </p>
+                          <p class="mt-1 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                            <CalendarDaysIcon class="size-3.5 shrink-0" aria-hidden="true" />
+                            {{ formatTaskScheduleLabel(task) }}
+                          </p>
+                          <span
+                            class="mt-2 inline-flex rounded-md px-2 py-0.5 text-xs font-medium"
+                            :class="
+                              task.completed
+                                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-violet-500/20 text-violet-700 dark:text-violet-200'
+                            "
+                          >
+                            {{ task.completed ? 'Completada' : 'Pendiente' }}
+                          </span>
+                        </button>
+                      </div>
+                    </li>
+                  </ul>
+                  <p v-else class="text-sm text-gray-500 dark:text-gray-400">
+                    No hay tareas vinculadas a este evento.
+                  </p>
+                </template>
+
+                <!-- Vista tarea -->
+                <template v-else-if="taskDetail">
+                  <h3 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+                    Sobre la tarea
+                  </h3>
+                  <dl class="space-y-4 text-sm">
+                    <div class="flex items-start gap-3">
+                      <span
+                        class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2"
+                        :class="
+                          taskDetail.completed
+                            ? 'border-violet-400 bg-violet-500 text-white'
+                            : 'border-violet-400/70'
+                        "
+                        aria-hidden="true"
+                      >
+                        <CheckIcon v-if="taskDetail.completed" class="size-3" />
+                      </span>
+                      <div>
+                        <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Estado</dt>
+                        <dd class="mt-0.5 font-medium text-gray-900 dark:text-white">
+                          {{ taskDetail.completed ? 'Completada' : 'Pendiente' }}
+                        </dd>
+                      </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                      <ClockIcon class="mt-0.5 size-5 shrink-0 text-gray-400" aria-hidden="true" />
+                      <div>
+                        <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Fecha y horario</dt>
+                        <dd class="mt-0.5 font-medium text-gray-900 dark:text-white">
+                          {{ formatTaskScheduleLabel(taskDetail) }}
+                        </dd>
+                        <dd class="mt-0.5 capitalize text-gray-600 dark:text-gray-400">
+                          <time v-if="dateAttr" :datetime="dateAttr">{{ dateLabel }}</time>
+                        </dd>
+                      </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                      <TagIcon class="mt-0.5 size-5 shrink-0 text-gray-400" aria-hidden="true" />
                       <div>
                         <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Tipo</dt>
                         <dd class="mt-0.5 font-medium text-gray-900 dark:text-white">
                           {{ taskTipoOf(taskDetail) }}
                         </dd>
                       </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                      <TagIcon class="mt-0.5 size-5 shrink-0 text-gray-400" aria-hidden="true" />
                       <div>
                         <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Cuadrante</dt>
                         <dd class="mt-0.5 font-medium text-gray-900 dark:text-white">
                           {{ taskCuadranteOf(taskDetail) }}
                         </dd>
                       </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                      <CalendarDaysIcon class="mt-0.5 size-5 shrink-0 text-gray-400" aria-hidden="true" />
                       <div>
                         <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Vinculación</dt>
                         <dd class="mt-0.5">
@@ -228,18 +452,21 @@ function viewLinkedEvent() {
                           <span v-else class="text-gray-700 dark:text-gray-300">Tarea suelta</span>
                         </dd>
                       </div>
+                    </div>
+                    <div v-if="taskDetail.description" class="flex items-start gap-3">
+                      <TagIcon class="mt-0.5 size-5 shrink-0 text-gray-400" aria-hidden="true" />
                       <div>
                         <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Descripción</dt>
                         <dd class="mt-0.5 leading-relaxed text-gray-700 dark:text-gray-300">
-                          {{ taskDetail.description || 'Sin descripción.' }}
+                          {{ taskDetail.description }}
                         </dd>
                       </div>
-                    </dl>
-                  </div>
-                </div>
+                    </div>
+                  </dl>
+                </template>
               </div>
 
-              <div class="border-t border-gray-200 px-5 py-4 dark:border-white/10">
+              <div class="border-t border-gray-200 bg-white px-5 py-3 dark:border-white/10 dark:bg-gray-900">
                 <button
                   type="button"
                   class="w-full rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900/40 dark:text-white dark:hover:bg-white/5"

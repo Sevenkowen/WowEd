@@ -11,9 +11,11 @@ import { useCalendarioGridDrag, type CalendarioDragItem } from '@/composables/us
 import { useCalendarioGridResize } from '@/composables/useCalendarioGridResize'
 import { taskTipoOf } from '@/data/calendarioTareaOptions'
 import { sidebarTaskCardClass, sidebarTaskDotClass, taskDisplayTitle, taskDisplayTime, timedTaskBlockClass, timedTaskDragGhostClass, timedTaskDragPreviewClass, timedTaskResizeHandleClass, timedTaskTimeClass, timedTaskTitleClass } from '@/utils/calendarioTaskStyles'
+import { standaloneTasksForDay, tasksLinkedToEvent } from '@/utils/calendarioTaskLinks'
 import { gridSpanFromEvent, gridSpanFromTask, isAllDayEvent, minutesFromEvent, minutesFromTask, formatTimeLabel, formatEventTimeRange, parseTimeToMinutes } from '@/utils/calendarioEventTime'
 import {
   timedEventBlockClass,
+  eventTypeBgStyleFromEvent,
   timedEventDragGhostClass,
   timedEventDragPreviewClass,
   timedEventResizeHandleClass,
@@ -50,6 +52,7 @@ import CalendarioItemDetalleDialog, {
   type CalendarioDetalle,
 } from '@/components/calendario/CalendarioItemDetalleDialog.vue'
 import CalendarioNowLineOverlay from '@/components/calendario/CalendarioNowLineOverlay.vue'
+import CalendarioEventTasksInline from '@/components/calendario/CalendarioEventTasksInline.vue'
 import CalendarioSlotCrearDialog from '@/components/calendario/CalendarioSlotCrearDialog.vue'
 import {
   CALENDARIO_DAY_START_HOUR,
@@ -59,6 +62,7 @@ import {
   calendarioHourCount,
   calendarioHourLabel,
 } from '@/utils/calendarioGridConstants'
+import { timedGridItemLiClass } from '@/utils/calendarioTimedGridStyles'
 
 defineOptions({ name: 'CalendarioEscolarWeek' })
 
@@ -548,7 +552,11 @@ function weekTasksForDay(date: string) {
 }
 
 function weekTasksSinHorario(date: string) {
-  return weekTasksForDay(date).filter((t) => !t.time && !t.eventId)
+  return standaloneTasksForDay(weekTasksForDay(date)).filter((t) => !t.time)
+}
+
+function tasksForEvent(eventId: string, date: string): CalTask[] {
+  return tasksLinkedToEvent(weekTasksForDay(date), eventId)
 }
 
 const hasWeekTasks = computed(() =>
@@ -620,18 +628,38 @@ function linkedEventName(eventId: string): string | null {
                 <div
                   v-for="day in weekDays"
                   :key="`allday-${day.date}`"
-                  class="flex flex-wrap gap-1 px-1.5 py-2"
+                  class="flex flex-col gap-1.5 px-1.5 py-2"
                 >
-                  <button
+                  <div
                     v-for="ev in weekAllDayEvents(day.date)"
                     :key="ev.id"
-                    type="button"
-                    :class="[monthEventBubbleClass(ev), 'max-w-full cursor-pointer text-left']"
-                    :title="ev.name"
-                    @click="openEventDetail(ev)"
+                    class="min-w-0"
                   >
-                    {{ ev.name }}
-                  </button>
+                    <button
+                      type="button"
+                      :class="[monthEventBubbleClass(ev), 'max-w-full cursor-pointer text-left']"
+                      :style="eventTypeBgStyleFromEvent(ev)"
+                      :title="ev.name"
+                      @click="openEventDetail(ev)"
+                    >
+                      {{ ev.name }}
+                    </button>
+                    <ul
+                      v-if="tasksForEvent(ev.id, day.date).length > 0"
+                      class="mt-0.5 space-y-0.5 border-l-2 border-violet-400/60 pl-1.5 dark:border-violet-500/50"
+                    >
+                      <li v-for="task in tasksForEvent(ev.id, day.date)" :key="task.id">
+                        <button
+                          type="button"
+                          class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[10px] font-medium text-violet-800 hover:bg-violet-500/10 dark:text-violet-200 dark:hover:bg-violet-500/15"
+                          @click.stop="openTaskDetail(task)"
+                        >
+                          <span class="size-1.5 shrink-0 rounded-full bg-violet-500" aria-hidden="true" />
+                          <span class="truncate">{{ taskDisplayTitle(task) }}</span>
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               </div>
 
@@ -673,7 +701,7 @@ function linkedEventName(eventId: string): string | null {
 
             <div
               ref="gridRef"
-              class="relative grid divide-x divide-gray-200 dark:divide-white/5"
+              class="relative grid divide-x divide-gray-200 overflow-hidden dark:divide-white/5"
               :class="WEEK_GRID_COLS"
               :style="{ gridTemplateRows: gridRowsStyle, minHeight: gridBodyMinHeight }"
             >
@@ -717,7 +745,7 @@ function linkedEventName(eventId: string): string | null {
           </template>
 
           <ol
-            class="pointer-events-none absolute inset-0 grid"
+            class="pointer-events-none absolute inset-0 grid overflow-hidden"
             :class="WEEK_GRID_COLS"
             :style="{ gridTemplateRows: gridRowsStyle }"
           >
@@ -753,8 +781,8 @@ function linkedEventName(eventId: string): string | null {
             <li
               v-for="task in weekTimedTasks"
               :key="`task-${task.id}-${task.date}`"
-              class="pointer-events-auto relative z-10 mt-px min-w-0"
               :class="[
+                timedGridItemLiClass(),
                 isDraggingItem(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow)) ? 'z-20' : '',
                 isResizingTask(task.id) ? 'z-30' : '',
               ]"
@@ -784,8 +812,8 @@ function linkedEventName(eventId: string): string | null {
             <li
               v-for="ev in weekEvents"
               :key="`${ev.id}-${ev.date}`"
-              class="pointer-events-auto relative z-10 mt-px min-w-0 before:pointer-events-none before:absolute before:inset-1 before:z-0 before:rounded-lg before:bg-gray-50 dark:before:bg-gray-950"
               :class="[
+                timedGridItemLiClass(),
                 isDraggingItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow)) ? 'z-20' : '',
                 isResizingEvent(ev.id) ? 'z-30' : '',
               ]"
@@ -795,21 +823,34 @@ function linkedEventName(eventId: string): string | null {
                 :class="[
                   timedEventBlockClass(ev),
                   dragEventClass(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow)),
-                  'group flex flex-col',
+                  'group flex min-h-0 flex-col',
+                  eventSpan(ev) === 1 ? 'justify-center' : '',
                   isResizingEvent(ev.id) ? 'ring-2 ring-white/50' : '',
                 ]"
+                :style="eventTypeBgStyleFromEvent(ev)"
                 @pointerdown="onItemPointerDown(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow), $event)"
               >
-                <button
-                  type="button"
-                  class="min-h-0 shrink-0 cursor-pointer text-left focus:outline-none"
-                  @click="!justDragged && !justResized && openEventDetail(ev)"
+                <CalendarioEventTasksInline
+                  :tasks="tasksForEvent(ev.id, ev.date)"
+                  :grid-span="eventSpan(ev)"
+                  @open-task="openTaskDetail"
+                  @open-event="openEventDetail(ev)"
                 >
-                  <p :class="timedEventTitleClass()">{{ ev.name }}</p>
-                  <p :class="timedEventTimeClass()">
-                    <time :datetime="ev.datetime">{{ eventTimeLabel(ev) }}</time>
-                  </p>
-                </button>
+                  <template #default="{ micro, hideTime }">
+                    <button
+                      type="button"
+                      class="min-h-0 w-full cursor-pointer text-left focus:outline-none"
+                      :class="micro ? 'flex h-full items-center' : ''"
+                      :title="hideTime ? `${ev.name} · ${eventTimeLabel(ev)}` : undefined"
+                      @click="!justDragged && !justResized && openEventDetail(ev)"
+                    >
+                      <p :class="[timedEventTitleClass(), micro && 'truncate leading-tight']">{{ ev.name }}</p>
+                      <p v-if="!hideTime" :class="timedEventTimeClass()">
+                        <time :datetime="ev.datetime">{{ eventTimeLabel(ev) }}</time>
+                      </p>
+                    </button>
+                  </template>
+                </CalendarioEventTasksInline>
                 <div
                   v-if="!isDateBeforeToday(ev.date) && !isDraggingItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow))"
                   data-cal-resize
@@ -836,7 +877,10 @@ function linkedEventName(eventId: string): string | null {
               class="pointer-events-none relative z-30 mt-px min-w-0"
               :style="{ gridRow: `${hover.gridRow} / span ${dragging!.span}`, gridColumnStart: hover.dayIndex + 2 }"
             >
-              <div :class="[timedEventBlockClass(dragPreviewEvent), timedEventDragPreviewClass()]">
+              <div
+                :class="[timedEventBlockClass(dragPreviewEvent), timedEventDragPreviewClass()]"
+                :style="eventTypeBgStyleFromEvent(dragPreviewEvent)"
+              >
                 <p :class="timedEventTitleClass()">{{ dragPreviewEvent.name }}</p>
                 <p :class="timedEventTimeClass()">
                   {{ dragPreviewTimeLabel(dragging!.span, hover.startTime) }}

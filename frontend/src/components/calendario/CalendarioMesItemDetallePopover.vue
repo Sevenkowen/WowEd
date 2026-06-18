@@ -9,8 +9,11 @@ import {
   XMarkIcon,
 } from '@heroicons/vue/24/outline'
 import type { CalEvent } from '@/data/calendarioEscolarDemo'
+import type { CalTask } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
+import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
 import { taskCuadranteOf, taskTipoOf } from '@/data/calendarioTareaOptions'
+import { tasksLinkedToEvent } from '@/utils/calendarioTaskLinks'
 import { eventColorSquareClass } from '@/utils/calendarioEventStyles'
 import { taskDisplayTitle } from '@/utils/calendarioTaskStyles'
 import { positionBesideAnchor } from '@/utils/calendarioPopoverPosition'
@@ -31,6 +34,7 @@ const emit = defineEmits<{
 }>()
 
 const { isUserEvent, porFecha: eventosPorFecha } = useCalendarioEscolarEvents()
+const { tareasDelDia } = useCalendarioEscolarTasks()
 
 const isEvent = computed(() => detalle.value?.type === 'event')
 const eventDetail = computed(() => (detalle.value?.type === 'event' ? detalle.value.event : null))
@@ -73,20 +77,32 @@ function close() {
   emit('close')
 }
 
+const eventLinkedTasks = computed(() => {
+  if (!eventDetail.value) return []
+  const date = eventDetail.value.datetime.slice(0, 10)
+  return tasksLinkedToEvent(tareasDelDia(date), eventDetail.value.id)
+})
+
 function eventNameById(eventId: string): string | null {
+  const needle = String(eventId)
   for (const list of Object.values(eventosPorFecha.value)) {
-    const ev = list.find((e) => e.id === eventId)
+    const ev = list.find((e) => String(e.id) === needle)
     if (ev) return ev.name
   }
   return null
 }
 
 function findEventById(eventId: string): CalEvent | null {
+  const needle = String(eventId)
   for (const list of Object.values(eventosPorFecha.value)) {
-    const ev = list.find((e) => e.id === eventId)
+    const ev = list.find((e) => String(e.id) === needle)
     if (ev) return ev
   }
   return null
+}
+
+function openLinkedTask(task: CalTask) {
+  detalle.value = { type: 'task', task }
 }
 
 function viewLinkedEvent() {
@@ -174,6 +190,24 @@ function viewLinkedEvent() {
               <li class="flex items-start gap-4">
                 <LockClosedIcon class="mt-0.5 size-5 shrink-0 text-gray-500" aria-hidden="true" />
                 <span>{{ isUserEvent(eventDetail.id) ? 'Privado' : 'Público' }}</span>
+              </li>
+              <li v-if="eventLinkedTasks.length > 0" class="flex items-start gap-4">
+                <CalendarIcon class="mt-0.5 size-5 shrink-0 text-violet-500" aria-hidden="true" />
+                <div class="min-w-0 flex-1 space-y-1.5">
+                  <p class="text-xs font-semibold tracking-wide text-violet-700 uppercase dark:text-violet-300">
+                    Tareas vinculadas
+                  </p>
+                  <button
+                    v-for="task in eventLinkedTasks"
+                    :key="task.id"
+                    type="button"
+                    class="flex w-full items-center gap-2 rounded-lg border border-violet-200/80 bg-violet-50/80 px-2.5 py-2 text-left text-sm font-medium text-violet-900 hover:bg-violet-100/90 dark:border-violet-500/30 dark:bg-violet-950/30 dark:text-violet-100 dark:hover:bg-violet-950/50"
+                    @click="openLinkedTask(task)"
+                  >
+                    <span class="size-2 shrink-0 rounded-full bg-violet-500" aria-hidden="true" />
+                    <span class="truncate">{{ taskDisplayTitle(task) }}</span>
+                  </button>
+                </div>
               </li>
             </template>
 

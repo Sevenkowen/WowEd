@@ -10,9 +10,11 @@ import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTas
 import { useCalendarioGridDrag, type CalendarioDragItem } from '@/composables/useCalendarioGridDrag'
 import { useCalendarioGridResize } from '@/composables/useCalendarioGridResize'
 import { taskDisplayTitle, taskDisplayTime, timedTaskBlockClass, timedTaskDragGhostClass, timedTaskDragPreviewClass, timedTaskResizeHandleClass, timedTaskTimeClass, timedTaskTitleClass } from '@/utils/calendarioTaskStyles'
+import { standaloneTasksForDay, tasksLinkedToEvent } from '@/utils/calendarioTaskLinks'
 import { gridSpanFromEvent, gridSpanFromTask, isAllDayEvent, minutesFromEvent, minutesFromTask, formatEventTimeRange, formatTimeLabel, parseTimeToMinutes } from '@/utils/calendarioEventTime'
 import {
   timedEventBlockClass,
+  eventTypeBgStyleFromEvent,
   timedEventDragGhostClass,
   timedEventDragPreviewClass,
   timedEventResizeHandleClass,
@@ -43,6 +45,7 @@ import {
 } from '@/utils/calendarioGoogleTheme'
 import CalendarioEscolarNavToolbar from '@/components/calendario/CalendarioEscolarNavToolbar.vue'
 import CalendarioNowLineOverlay from '@/components/calendario/CalendarioNowLineOverlay.vue'
+import CalendarioEventTasksInline from '@/components/calendario/CalendarioEventTasksInline.vue'
 import CalendarioSlotCrearDialog from '@/components/calendario/CalendarioSlotCrearDialog.vue'
 import CalendarioItemDetalleDialog, {
   type CalendarioDetalle,
@@ -56,6 +59,7 @@ import {
   calendarioHourCount,
   calendarioHourLabel,
 } from '@/utils/calendarioGridConstants'
+import { timedGridItemLiClass } from '@/utils/calendarioTimedGridStyles'
 
 defineOptions({ name: 'CalendarioEscolarDay' })
 
@@ -480,11 +484,11 @@ const dayTasks = computed(() => tareasDelDia(formatYmd(focusDay.value)))
 
 /** Tareas sueltas sin horario fijo en la grilla. */
 const standaloneTasks = computed(() =>
-  dayTasks.value.filter((t) => !t.eventId && !t.time),
+  standaloneTasksForDay(dayTasks.value).filter((t) => !t.time),
 )
 
 function tasksForEvent(eventId: string): CalTask[] {
-  return dayTasks.value.filter((t) => t.eventId === eventId)
+  return tasksLinkedToEvent(dayTasks.value, eventId)
 }
 
 function prevDay() {
@@ -556,19 +560,39 @@ function openTaskDetail(task: CalTask) {
           v-if="allDayEvents.length > 0"
           class="shrink-0 border-b border-gray-200 bg-white/80 px-4 py-2 dark:border-white/10 dark:bg-gray-900/80"
         >
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <span class="shrink-0 text-[11px] font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+          <div class="flex flex-wrap items-start gap-x-3 gap-y-2">
+            <span class="shrink-0 pt-1 text-[11px] font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
               Todo el día
             </span>
-            <button
+            <div
               v-for="ev in allDayEvents"
               :key="ev.id"
-              type="button"
-              :class="[monthEventBubbleClass(ev), 'max-w-full cursor-pointer']"
-              @click="openEventDetail(ev)"
+              class="flex min-w-0 max-w-full flex-col gap-0.5"
             >
-              {{ ev.name }}
-            </button>
+              <button
+                type="button"
+                :class="[monthEventBubbleClass(ev), 'max-w-full cursor-pointer']"
+                :style="eventTypeBgStyleFromEvent(ev)"
+                @click="openEventDetail(ev)"
+              >
+                {{ ev.name }}
+              </button>
+              <ul
+                v-if="tasksForEvent(ev.id).length > 0"
+                class="space-y-0.5 border-l-2 border-violet-400/60 pl-1.5 dark:border-violet-500/50"
+              >
+                <li v-for="task in tasksForEvent(ev.id)" :key="task.id">
+                  <button
+                    type="button"
+                    class="inline-flex max-w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] font-medium text-violet-800 hover:bg-violet-500/10 dark:text-violet-200 dark:hover:bg-violet-500/15"
+                    @click.stop="openTaskDetail(task)"
+                  >
+                    <span class="size-1.5 shrink-0 rounded-full bg-violet-500" aria-hidden="true" />
+                    <span class="truncate">{{ taskDisplayTitle(task) }}</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
         <div
@@ -619,7 +643,7 @@ function openTaskDetail(task: CalTask) {
               <div class="min-w-[16rem]">
             <div
               ref="gridRef"
-              class="relative grid divide-x divide-gray-200 dark:divide-white/5"
+              class="relative grid divide-x divide-gray-200 overflow-hidden dark:divide-white/5"
               :class="DAY_GRID_COLS"
               :style="{ gridTemplateRows: gridRowsStyle, minHeight: gridBodyMinHeight }"
             >
@@ -655,7 +679,7 @@ function openTaskDetail(task: CalTask) {
               </template>
 
               <ol
-                class="pointer-events-none absolute inset-0 grid"
+                class="pointer-events-none absolute inset-0 grid overflow-hidden"
                 :class="DAY_GRID_COLS"
                 :style="{ gridTemplateRows: gridRowsStyle }"
               >
@@ -691,9 +715,10 @@ function openTaskDetail(task: CalTask) {
                 <li
                   v-for="task in dayTimedTasks"
                   :key="`timed-task-${task.id}`"
-                  class="pointer-events-auto relative col-start-2 mt-px min-w-0"
+                  class="col-start-2"
                   :class="[
-                    isDraggingItem(dragItemPayload('task', task.id, taskSpan(task), task.gridRow)) ? 'z-20' : 'z-10',
+                    timedGridItemLiClass(),
+                    isDraggingItem(dragItemPayload('task', task.id, taskSpan(task), task.gridRow)) ? 'z-20' : '',
                     isResizingTask(task.id) ? 'z-30' : '',
                   ]"
                   :style="{ gridRow: `${task.gridRow} / span ${taskSpan(task)}` }"
@@ -722,9 +747,10 @@ function openTaskDetail(task: CalTask) {
                 <li
                   v-for="ev in dayEvents"
                   :key="ev.id"
-                  class="pointer-events-auto relative col-start-2 mt-px min-w-0 before:pointer-events-none before:absolute before:inset-1 before:z-0 before:rounded-lg before:bg-gray-50 dark:before:bg-gray-950"
+                  class="col-start-2"
                   :class="[
-                    isDraggingItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow)) ? 'z-20' : 'z-10',
+                    timedGridItemLiClass(),
+                    isDraggingItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow)) ? 'z-20' : '',
                     isResizingEvent(ev.id) ? 'z-30' : '',
                   ]"
                   :style="{ gridRow: `${ev.gridRow} / span ${eventSpan(ev)}` }"
@@ -733,21 +759,34 @@ function openTaskDetail(task: CalTask) {
                     :class="[
                       timedEventBlockClass(ev),
                       dragEventClass(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow)),
-                      'group flex flex-col',
+                      'group flex min-h-0 flex-col',
+                      eventSpan(ev) === 1 ? 'justify-center' : '',
                       isResizingEvent(ev.id) ? 'ring-2 ring-white/50' : '',
                     ]"
+                    :style="eventTypeBgStyleFromEvent(ev)"
                     @pointerdown="onItemPointerDown(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow), $event)"
                   >
-                    <button
-                      type="button"
-                      class="shrink-0 cursor-pointer text-left focus:outline-none"
-                      @click="!justDragged && !justResized && openEventDetail(ev)"
+                    <CalendarioEventTasksInline
+                      :tasks="tasksForEvent(ev.id)"
+                      :grid-span="eventSpan(ev)"
+                      @open-task="openTaskDetail"
+                      @open-event="openEventDetail(ev)"
                     >
-                      <p :class="timedEventTitleClass()">{{ ev.name }}</p>
-                      <p :class="timedEventTimeClass()">
-                        <time :datetime="ev.datetime">{{ eventTimeLabel(ev) }}</time>
-                      </p>
-                    </button>
+                      <template #default="{ micro, hideTime }">
+                        <button
+                          type="button"
+                          class="w-full shrink-0 cursor-pointer text-left focus:outline-none"
+                          :class="micro ? 'flex h-full items-center' : ''"
+                          :title="hideTime ? `${ev.name} · ${eventTimeLabel(ev)}` : undefined"
+                          @click="!justDragged && !justResized && openEventDetail(ev)"
+                        >
+                          <p :class="[timedEventTitleClass(), micro && 'truncate leading-tight']">{{ ev.name }}</p>
+                          <p v-if="!hideTime" :class="timedEventTimeClass()">
+                            <time :datetime="ev.datetime">{{ eventTimeLabel(ev) }}</time>
+                          </p>
+                        </button>
+                      </template>
+                    </CalendarioEventTasksInline>
                     <div
                       v-if="!isDateBeforeToday(dayYmd) && !isDraggingItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow))"
                       data-cal-resize
@@ -755,21 +794,6 @@ function openTaskDetail(task: CalTask) {
                       aria-label="Ajustar duración del evento"
                       @pointerdown="onEventResizePointerDown(ev.id, $event)"
                     />
-                    <ul
-                      v-if="tasksForEvent(ev.id).length > 0"
-                      class="min-h-0 flex-1 space-y-0.5 overflow-y-auto border-t border-black/5 px-2 py-1.5 dark:border-white/10"
-                    >
-                      <li v-for="task in tasksForEvent(ev.id)" :key="task.id">
-                        <button
-                          type="button"
-                          class="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-[11px] font-medium text-violet-800 hover:bg-violet-500/10 dark:text-violet-200 dark:hover:bg-violet-500/15"
-                          @click.stop="openTaskDetail(task)"
-                        >
-                          <span class="size-1.5 shrink-0 rounded-full bg-violet-500" aria-hidden="true" />
-                          <span class="truncate">{{ taskDisplayTitle(task) }}</span>
-                        </button>
-                      </li>
-                    </ul>
                   </div>
                 </li>
                 <li
@@ -789,7 +813,10 @@ function openTaskDetail(task: CalTask) {
                   class="pointer-events-none relative col-start-2 z-30 mt-px min-w-0"
                   :style="{ gridRow: `${hover.gridRow} / span ${dragging!.span}` }"
                 >
-                  <div :class="[timedEventBlockClass(dragPreviewEvent), timedEventDragPreviewClass()]">
+                  <div
+                    :class="[timedEventBlockClass(dragPreviewEvent), timedEventDragPreviewClass()]"
+                    :style="eventTypeBgStyleFromEvent(dragPreviewEvent)"
+                  >
                     <p :class="timedEventTitleClass()">{{ dragPreviewEvent.name }}</p>
                     <p :class="timedEventTimeClass()">
                       {{ dragPreviewTimeLabel(dragging!.span, hover.startTime) }}

@@ -53,3 +53,4 @@ class Task(Base):
     cuadrante: Mapped[str | None] = mapped_column(Text, nullable=True)
     completed: Mapped[bool] = mapped_column(Boolean, default=False)
     recurrence_preset: Mapped[str | None] = mapped_column(Text, nullable=True)
+    institution_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)

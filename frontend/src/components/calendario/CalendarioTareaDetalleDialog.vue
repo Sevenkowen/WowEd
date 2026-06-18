@@ -25,16 +25,15 @@ import KtInputModeTimePicker from '@/components/KtInputModeTimePicker.vue'
 import type { CalTask } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
 import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
+import { useCalendarioCatalogs } from '@/composables/useCalendarioCatalogs'
 import {
   DEFAULT_TASK_CUADRANTE,
-  DEFAULT_TASK_TIPO,
   taskCuadranteOf,
   taskCuadrantes,
-  taskTipos,
   taskTipoOf,
   type TaskCuadranteOption,
-  type TaskTipoOption,
 } from '@/data/calendarioTareaOptions'
+import type { CalendarioCatalogItem } from '@/data/calendarioCatalogDefaults'
 import { formatTimeLabel, parseTimeToMinutes } from '@/utils/calendarioEventTime'
 import {
   CALENDAR_PAST_DATE_MESSAGE,
@@ -74,6 +73,8 @@ const STANDALONE_EVENT_ID = '__standalone__'
 const { todasLasTareas, updateTask, deleteTask, setCompletada } = useCalendarioEscolarTasks()
 const { eventosDelDia } = useCalendarioEscolarEvents()
 
+const { taskTipoOptions, defaultTaskTipo } = useCalendarioCatalogs()
+
 const formError = ref('')
 const confirmDelete = ref(false)
 const saving = ref(false)
@@ -85,7 +86,7 @@ const time = ref('09:00')
 const endTime = ref('10:00')
 const allDay = ref(false)
 const completed = ref(false)
-const tipo = ref<TaskTipoOption>(DEFAULT_TASK_TIPO)
+const tipo = ref<CalendarioCatalogItem>(defaultTaskTipo.value)
 const cuadrante = ref<TaskCuadranteOption>(DEFAULT_TASK_CUADRANTE)
 const eventLinkId = ref(STANDALONE_EVENT_ID)
 
@@ -152,7 +153,7 @@ function loadFormFromTask(t: CalTask): void {
   time.value = t.time ?? '09:00'
   endTime.value = t.endTime ?? '10:00'
   completed.value = !!t.completed
-  tipo.value = taskTipos.find((o) => o.name === taskTipoOf(t)) ?? DEFAULT_TASK_TIPO
+  tipo.value = taskTipoOptions.value.find((o) => o.name === taskTipoOf(t)) ?? defaultTaskTipo.value
   cuadrante.value = taskCuadrantes.find((o) => o.name === taskCuadranteOf(t)) ?? DEFAULT_TASK_CUADRANTE
   eventLinkId.value = t.eventId ?? STANDALONE_EVENT_ID
   formError.value = ''
@@ -415,7 +416,7 @@ async function onDelete(): Promise<void> {
                         class="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-gray-800"
                       >
                         <ListboxOption
-                          v-for="opt in taskTipos"
+                          v-for="opt in taskTipoOptions"
                           :key="opt.id"
                           v-slot="{ active, selected }"
                           :value="opt"

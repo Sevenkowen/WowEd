@@ -2,7 +2,9 @@ import { computed, ref } from 'vue'
 import type { CalEvent } from '@/data/calendarioEscolarDemo'
 import {
   apiCreateEvent,
+  apiDeleteEvent,
   apiMoveEvent,
+  apiPatchEvent,
   apiResizeEvent,
   fetchEventsPorFecha,
   type CreateEventPayload,
@@ -108,6 +110,33 @@ export function useCalendarioEscolarEventsApi() {
     return true
   }
 
+  async function patchEvent(
+    eventId: string,
+    patch: {
+      title?: string
+      description?: string
+      date?: string
+      startTime?: string
+      endTime?: string
+      allDay?: boolean
+      eventType?: string
+    },
+  ): Promise<boolean> {
+    const date = findEventDate(apiPorFecha.value, eventId)
+    if (!date || !isCalendarModifyAllowed(date, patch.date)) return false
+    await apiPatchEvent(eventId, patch)
+    await loadAll()
+    return true
+  }
+
+  async function deleteEvent(eventId: string): Promise<boolean> {
+    const date = findEventDate(apiPorFecha.value, eventId)
+    if (!date || !isCalendarModifyAllowed(date)) return false
+    await apiDeleteEvent(eventId)
+    await loadAll()
+    return true
+  }
+
   return {
     porFecha,
     eventosDelDia,
@@ -117,5 +146,7 @@ export function useCalendarioEscolarEventsApi() {
     isUserEvent,
     moveEvent,
     resizeEvent,
+    patchEvent,
+    deleteEvent,
   }
 }

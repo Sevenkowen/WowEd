@@ -22,18 +22,28 @@ Si `pip` no se reconoce, usá siempre `py -m pip` en lugar de `pip`.
 
 **Python 3.14:** si falla al instalar `pydantic`, actualizá pip (`py -m pip install -U pip`) o instalá [Python 3.12](https://www.python.org/downloads/) y creá el venv con `py -3.12 -m venv .venv`.
 
-## Migración para tareas en calendario
+## Migraciones de base de datos
 
-La tabla `tasks` en el VPS no trae fecha/hora de calendario. Ejecutá **una vez**:
+Ejecutá **una vez** (usa `DATABASE_URL` de tu `.env`):
 
-```bash
-psql -h 45.236.130.10 -U ajenjo -d postgres -f migrations/001_task_calendar_fields.sql
+```powershell
+cd E:\WowEd\backend
+.\.venv\Scripts\Activate.ps1
+py scripts/run_migrations.py
 ```
 
 Verificá:
 
 ```bash
 curl http://127.0.0.1:8000/api/health/db-schema
+```
+
+Todos los valores deben ser `true` (incluido `event_types_table`).
+
+Migración manual alternativa:
+
+```bash
+psql -h HOST -U USER -d DB -f migrations/002_catalog_types.sql
 ```
 
 ## Correr el servidor

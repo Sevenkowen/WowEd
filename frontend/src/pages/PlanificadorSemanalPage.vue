@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { PlusIcon } from '@heroicons/vue/20/solid'
+import {
+  useWeeklyPlanner,
+  type BlockType,
+  type DayId,
+  type DelegatedStatus,
+  type QuadrantId,
+} from '@/composables/useWeeklyPlanner'
 
 defineOptions({ name: 'PlanificadorSemanalPage' })
 
@@ -12,27 +19,20 @@ const tabs: { id: TabId; label: string }[] = [
 ]
 
 const activeTab = ref<TabId>('prioridades')
-const focoSemanal = ref('Mejorar las estrategias de enseñanza de comprensión lectora')
 
-function guardarFoco() {
-  // placeholder: aquí luego podemos persistir en backend/localStorage
+const {
+  focoSemanal,
+  tareas,
+  schedule,
+  delegatedTasks,
+  saving,
+  loadError,
+  persistPlanner,
+} = useWeeklyPlanner()
+
+async function guardarFoco() {
+  await persistPlanner()
 }
-
-type QuadrantId = 'ui' | 'nui' | 'uni' | 'nuni'
-type TaskItem = { id: string; text: string }
-
-const tareas = ref<Record<QuadrantId, TaskItem[]>>({
-  ui: [{ id: 'ui-1', text: 'Resolver situación de alumno en riesgo' }],
-  nui: [
-    { id: 'nui-1', text: 'Revisar planificaciones docentes' },
-    { id: 'nui-2', text: 'Preparar reunión pedagógica' },
-  ],
-  uni: [
-    { id: 'uni-1', text: 'Responder correos pendientes' },
-    { id: 'uni-2', text: 'Atender reclamo de proveedor' },
-  ],
-  nuni: [{ id: 'nuni-1', text: 'Actualizar redes sociales' }],
-})
 
 const showNuevaTarea = ref(false)
 const nuevaTareaTexto = ref('')
@@ -76,10 +76,10 @@ function addTask() {
   tareas.value[q] = [...tareas.value[q], { id: `${q}-${Date.now()}`, text }]
   nuevaTareaTexto.value = ''
   showNuevaTarea.value = false
+  void persistPlanner()
 }
 
-// --- Horario semanal (UI demo) ---
-type DayId = 'lunes' | 'martes' | 'miercoles' | 'jueves' | 'viernes'
+// --- Horario semanal ---
 const days: { id: DayId; label: string }[] = [
   { id: 'lunes', label: 'Lunes' },
   { id: 'martes', label: 'Martes' },
@@ -89,48 +89,7 @@ const days: { id: DayId; label: string }[] = [
 ]
 const activeDay = ref<DayId>('lunes')
 
-type BlockType = 'P' | 'A' | 'SC' | 'F' | 'PE'
-type WeekBlock = { id: string; start: string; end: string; type: BlockType; title: string }
-
-const schedule = ref<Record<DayId, WeekBlock[]>>({
-  lunes: [
-    { id: 'b1', start: '08:00', end: '09:00', type: 'P', title: 'Observación de clases' },
-    { id: 'b2', start: '09:00', end: '10:00', type: 'P', title: 'Seguimiento docente' },
-    { id: 'b3', start: '10:00', end: '11:00', type: 'A', title: 'Reunión administrativa' },
-    { id: 'b4', start: '11:00', end: '12:00', type: 'F', title: 'Tiempo flexible' },
-    { id: 'b5', start: '12:00', end: '13:00', type: 'PE', title: 'Almuerzo' },
-    { id: 'b6', start: '13:00', end: '14:00', type: 'SC', title: 'Atención a familias' },
-  ],
-  martes: [
-    { id: 'b7', start: '08:00', end: '10:00', type: 'P', title: 'Capacitación docente' },
-    { id: 'b8', start: '10:00', end: '11:00', type: 'A', title: 'Tareas administrativas' },
-    { id: 'b9', start: '11:00', end: '12:00', type: 'F', title: 'Tiempo flexible' },
-    { id: 'b10', start: '12:00', end: '13:00', type: 'PE', title: 'Almuerzo' },
-    { id: 'b11', start: '13:00', end: '15:00', type: 'P', title: 'Reunión equipo directivo' },
-  ],
-  miercoles: [
-    { id: 'b12', start: '08:00', end: '09:00', type: 'P', title: 'Revisión planificaciones' },
-    { id: 'b13', start: '09:00', end: '11:00', type: 'SC', title: 'Reunión consejo escolar' },
-    { id: 'b14', start: '11:00', end: '12:00', type: 'F', title: 'Tiempo flexible' },
-    { id: 'b15', start: '12:00', end: '13:00', type: 'PE', title: 'Almuerzo' },
-    { id: 'b16', start: '13:00', end: '15:00', type: 'A', title: 'Elaboración de informes' },
-  ],
-  jueves: [
-    { id: 'b17', start: '08:00', end: '10:00', type: 'P', title: 'Observación de clases' },
-    { id: 'b18', start: '10:00', end: '11:00', type: 'F', title: 'Tiempo flexible' },
-    { id: 'b19', start: '11:00', end: '12:00', type: 'A', title: 'Reunión con proveedores' },
-    { id: 'b20', start: '12:00', end: '13:00', type: 'PE', title: 'Almuerzo' },
-    { id: 'b21', start: '13:00', end: '15:00', type: 'SC', title: 'Encuentro con familias' },
-  ],
-  viernes: [
-    { id: 'b22', start: '08:00', end: '09:00', type: 'A', title: 'Revisión presupuesto' },
-    { id: 'b23', start: '09:00', end: '11:00', type: 'P', title: 'Reunión equipo docente' },
-    { id: 'b24', start: '11:00', end: '12:00', type: 'F', title: 'Tiempo flexible' },
-    { id: 'b25', start: '12:00', end: '13:00', type: 'PE', title: 'Almuerzo' },
-    { id: 'b26', start: '13:00', end: '14:00', type: 'SC', title: 'Comunicación institucional' },
-    { id: 'b27', start: '14:00', end: '15:00', type: 'A', title: 'Cierre semanal' },
-  ],
-})
+const scheduleBlocks = schedule
 
 function typeBadge(type: BlockType) {
   const map: Record<BlockType, { label: string; cls: string; row: string }> = {
@@ -167,44 +126,6 @@ function addBlock() {
   // placeholder para modal / formulario
 }
 
-// --- Tareas delegadas (UI demo) ---
-type DelegatedStatus = 'En progreso' | 'Pendiente' | 'Completada'
-type DelegatedTask = {
-  id: string
-  title: string
-  assignee: string
-  due: string
-  followUp: string
-  status: DelegatedStatus
-}
-
-const delegatedTasks = ref<DelegatedTask[]>([
-  {
-    id: 'dt-1',
-    title: 'Completar informe mensual de asistencia',
-    assignee: 'María López (Secretaria)',
-    due: '19 may',
-    followUp: '17 may',
-    status: 'En progreso',
-  },
-  {
-    id: 'dt-2',
-    title: 'Coordinar visita del equipo de orientación',
-    assignee: 'Carlos Gómez (Vicedirector)',
-    due: '18 may',
-    followUp: '16 may',
-    status: 'Pendiente',
-  },
-  {
-    id: 'dt-3',
-    title: 'Actualizar cartelera institucional',
-    assignee: 'Laura Martínez (Docente)',
-    due: '20 may',
-    followUp: '14 may',
-    status: 'Completada',
-  },
-])
-
 function delegatedCardClass(status: DelegatedStatus): string {
   switch (status) {
     case 'En progreso':
@@ -230,6 +151,13 @@ function delegatedPillClass(status: DelegatedStatus): string {
 function addDelegatedTask() {
   // placeholder para modal / formulario
 }
+
+function formatDelegatedDate(iso: string): string {
+  if (!iso) return '—'
+  const d = new Date(iso.includes('T') ? iso : `${iso}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+}
 </script>
 
 <template>
@@ -237,6 +165,7 @@ function addDelegatedTask() {
     <header>
       <h1 class="text-3xl font-semibold tracking-tight text-gray-900 dark:text-white">Planificador Semanal</h1>
       <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Organiza tus actividades y prioridades para la semana</p>
+      <p v-if="loadError" class="mt-2 text-sm text-rose-600 dark:text-rose-400">{{ loadError }}</p>
     </header>
 
     <section
@@ -260,7 +189,7 @@ function addDelegatedTask() {
             class="inline-flex items-center rounded-lg bg-purple-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-purple-500 focus:outline-hidden focus:ring-4 focus:ring-purple-200 dark:focus:ring-purple-500/25"
             @click="guardarFoco"
           >
-            Guardar
+            {{ saving ? 'Guardando…' : 'Guardar' }}
           </button>
         </div>
       </div>
@@ -429,13 +358,13 @@ function addDelegatedTask() {
           </button>
         </div>
 
-        <div v-if="schedule[activeDay].length === 0" class="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400 sm:px-6">
+        <div v-if="scheduleBlocks[activeDay].length === 0" class="px-5 py-10 text-center text-sm text-gray-500 dark:text-gray-400 sm:px-6">
           Todavía no hay bloques para este día.
         </div>
 
         <ul v-else class="divide-y divide-gray-200 dark:divide-white/10" role="list">
           <li
-            v-for="b in schedule[activeDay]"
+            v-for="b in scheduleBlocks[activeDay]"
             :key="b.id"
             class="grid grid-cols-[6.5rem_1fr] gap-4 px-5 py-4 sm:grid-cols-[7.5rem_1fr] sm:px-6"
             :class="typeBadge(b.type).row"
@@ -490,11 +419,11 @@ function addDelegatedTask() {
                 </p>
                 <p class="inline-flex items-center gap-2">
                   <span class="text-gray-400 dark:text-gray-500">📅</span>
-                  Hasta {{ t.due }}
+                  Hasta {{ formatDelegatedDate(t.due) }}
                 </p>
                 <p class="inline-flex items-center gap-2">
                   <span class="text-gray-400 dark:text-gray-500">🕒</span>
-                  Seguimiento: {{ t.followUp }}
+                  Seguimiento: {{ formatDelegatedDate(t.followUp) }}
                 </p>
               </div>
             </div>

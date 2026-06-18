@@ -1,53 +1,20 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import { ChevronDownIcon } from '@heroicons/vue/16/solid'
 import { PlusIcon } from '@heroicons/vue/24/outline'
+import { useObjectives } from '@/composables/useObjectives'
+import type { ObjectiveStatus } from '@/api/objectivesApi'
 
 defineOptions({ name: 'ObjetivosPage' })
 
-type ObjectiveStatus = 'En Progreso' | 'Completado' | 'Retrasado'
-type Objective = {
-  id: string
-  title: string
-  description: string
-  indicators: string[]
-  responsables: string[]
-  plazo: string
-  status: ObjectiveStatus
-  expanded: boolean
-}
-
-const objetivos = ref<Objective[]>([
-  {
-    id: 'obj-1',
-    title: 'Mejorar los niveles de comprensión lectora',
-    description:
-      'Incrementar en un 15% el nivel de comprensión lectora de los estudiantes, medido a través de evaluaciones estandarizadas.',
-    indicators: [
-      'Resultados en evaluaciones diagnósticas trimestrales',
-      'Porcentaje de estudiantes que alcanzan nivel satisfactorio',
-    ],
-    responsables: ['Coordinación Académica', 'Docentes de Lenguaje'],
-    plazo: 'Diciembre 2025',
-    status: 'En Progreso',
-    expanded: false,
-  },
-  {
-    id: 'obj-2',
-    title: 'Implementar estrategias de educación emocional',
-    description:
-      'Desarrollar competencias socioemocionales en la comunidad educativa a través de un programa estructurado.',
-    indicators: [
-      'Número de talleres realizados',
-      'Encuestas de clima escolar',
-      'Reducción de conflictos registrados',
-    ],
-    responsables: ['Equipo de Orientación', 'Tutores'],
-    plazo: 'Agosto 2025',
-    status: 'En Progreso',
-    expanded: false,
-  },
-])
+const {
+  objetivos,
+  loading,
+  loadError,
+  toggleObjective,
+  setObjectiveStatus,
+  addObjective,
+  removeObjective,
+} = useObjectives()
 
 const reminders = [
   { id: 'r1', title: 'Revisión Primer Trimestre', date: '30 de Marzo, 2025', tone: 'amber' as const, action: 'Programado' },
@@ -56,7 +23,7 @@ const reminders = [
   { id: 'r4', title: 'Evaluación Final Anual', date: '15 de Diciembre, 2025', tone: 'purple' as const, action: 'Programar' },
 ] as const
 
-function statusPillClass(status: ObjectiveStatus): string {
+function statusPillClass(status: ObjectiveStatus | string): string {
   switch (status) {
     case 'Completado':
       return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200'
@@ -67,13 +34,6 @@ function statusPillClass(status: ObjectiveStatus): string {
   }
 }
 
-function toggleObjective(id: string) {
-  objetivos.value = objetivos.value.map((o) => (o.id === id ? { ...o, expanded: !o.expanded } : o))
-}
-
-function setObjectiveStatus(id: string, status: ObjectiveStatus) {
-  objetivos.value = objetivos.value.map((o) => (o.id === id ? { ...o, status } : o))
-}
 </script>
 
 <template>
@@ -98,11 +58,17 @@ function setObjectiveStatus(id: string, status: ObjectiveStatus) {
         <button
           type="button"
           class="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-purple-500 focus:outline-none focus:ring-4 focus:ring-purple-200 dark:focus:ring-purple-500/25"
+          @click="addObjective"
         >
           <PlusIcon class="size-5" aria-hidden="true" />
           Añadir Objetivo
         </button>
       </div>
+
+      <p v-if="loadError" class="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-500/30 dark:bg-rose-950/20 dark:text-rose-200">
+        {{ loadError }}
+      </p>
+      <p v-else-if="loading" class="text-sm text-gray-500 dark:text-gray-400">Cargando objetivos…</p>
 
       <div class="space-y-4">
         <article
@@ -244,6 +210,7 @@ function setObjectiveStatus(id: string, status: ObjectiveStatus) {
                     <button
                       type="button"
                       class="font-semibold text-rose-700 hover:text-rose-600 dark:text-rose-300 dark:hover:text-rose-200"
+                      @click="removeObjective(o.id)"
                     >
                       Eliminar
                     </button>

@@ -15,19 +15,33 @@ def health(db: Session = Depends(get_db)):
 
 @router.get("/health/db-schema")
 def db_schema_check(db: Session = Depends(get_db)):
-    """Verifica columnas de calendario en tasks (migración 001)."""
-    row = db.execute(
-        text(
-            """
-            SELECT COUNT(*) AS n
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-              AND table_name = 'tasks'
-              AND column_name = 'due_date'
-            """
-        )
-    ).one()
+    """Verifica migraciones de calendario, catálogos, objetivos y planificador."""
+    checks = {
+        "tasks_calendar_columns": (
+            "tasks",
+            "due_date",
+        ),
+        "event_types_table": ("event_types", "id"),
+        "task_types_table": ("task_types", "id"),
+        "objectives_table": ("objectives", "id"),
+        "weekly_planner_table": ("weekly_planner_weeks", "id"),
+    }
+    result: dict[str, bool] = {}
+    for key, (table, column) in checks.items():
+        row = db.execute(
+            text(
+                """
+                SELECT COUNT(*) AS n
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = :table
+                  AND column_name = :column
+                """
+            ),
+            {"table": table, "column": column},
+        ).one()
+        result[key] = row.n > 0
     return {
-        "tasks_calendar_columns": row.n > 0,
-        "hint": "Ejecutá backend/migrations/001_task_calendar_fields.sql si tasks_calendar_columns es false",
+        **result,
+        "hint": "Ejecutá backend/migrations/*.sql en orden si algún valor es false",
     }

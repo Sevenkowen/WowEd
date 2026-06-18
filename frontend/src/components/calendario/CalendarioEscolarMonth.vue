@@ -6,8 +6,9 @@ import type { CalTask } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
 import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
 import { formatYmd, isDateBeforeToday, mondayIndex } from '@/utils/calendarioDates'
-import { monthEventBubbleClass } from '@/utils/calendarioEventStyles'
+import { monthEventBubbleClass, eventTypeBgStyleFromEvent } from '@/utils/calendarioEventStyles'
 import { monthTaskBubbleClass, taskDisplayTitle } from '@/utils/calendarioTaskStyles'
+import { standaloneTasksForDay } from '@/utils/calendarioTaskLinks'
 import type { CalendarioContentMode, CalendarioDisplayView } from '@/utils/calendarioDates'
 import {
   gcalBorder,
@@ -104,7 +105,7 @@ function buildMonth(y: number, m: number): DayCell[] {
       isSelected: selectedDate.value === dateStr,
       isPast: isDateBeforeToday(dateStr),
       events: contentMode.value === 'tareas' ? [] : (porFecha.value[dateStr] ?? []),
-      tasks: tareasPorFecha.value[dateStr] ?? [],
+      tasks: standaloneTasksForDay(tareasPorFecha.value[dateStr] ?? []),
     })
   }
   return cells
@@ -321,6 +322,7 @@ const weekDays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'] as const
               <button
                 type="button"
                 :class="monthEventBubbleClass(event)"
+                :style="eventTypeBgStyleFromEvent(event)"
                 :title="event.name"
                 @click="onEventBubbleClick(event, $event)"
               >

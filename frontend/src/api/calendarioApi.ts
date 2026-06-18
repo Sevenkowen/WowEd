@@ -1,4 +1,4 @@
-import { apiFetch } from '@/api/http'
+import { apiFetch, withInstitutionBody } from '@/api/http'
 import type { CalEvent } from '@/data/calendarioEscolarDemo'
 import type { CalTask } from '@/data/calendarioEscolarTypes'
 import type { CalRecurrencePreset } from '@/utils/calendarioRecurrence'
@@ -38,16 +38,18 @@ export interface CreateEventPayload {
 export async function apiCreateEvent(payload: CreateEventPayload): Promise<CalEvent> {
   return apiFetch<CalEvent>('/calendar/events', {
     method: 'POST',
-    body: JSON.stringify({
-      date: payload.date,
-      title: payload.title,
-      description: payload.description,
-      start_time: payload.startTime,
-      end_time: payload.endTime,
-      all_day: payload.allDay ?? false,
-      event_type: payload.eventType,
-      recurrence: payload.recurrence ?? 'none',
-    }),
+    body: JSON.stringify(
+      withInstitutionBody({
+        date: payload.date,
+        title: payload.title,
+        description: payload.description,
+        start_time: payload.startTime,
+        end_time: payload.endTime,
+        all_day: payload.allDay ?? false,
+        event_type: payload.eventType,
+        recurrence: payload.recurrence ?? 'none',
+      }),
+    ),
   })
 }
 
@@ -63,6 +65,35 @@ export async function apiResizeEvent(id: string, endTime: string): Promise<CalEv
     method: 'PATCH',
     body: JSON.stringify({ end_time: endTime }),
   })
+}
+
+export interface PatchEventPayload {
+  title?: string
+  description?: string
+  date?: string
+  startTime?: string
+  endTime?: string
+  allDay?: boolean
+  eventType?: string
+}
+
+export async function apiPatchEvent(id: string, patch: PatchEventPayload): Promise<CalEvent> {
+  return apiFetch<CalEvent>(`/calendar/events/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      title: patch.title,
+      description: patch.description,
+      date: patch.date,
+      start_time: patch.startTime,
+      end_time: patch.endTime,
+      all_day: patch.allDay,
+      event_type: patch.eventType,
+    }),
+  })
+}
+
+export async function apiDeleteEvent(id: string): Promise<void> {
+  await apiFetch<void>(`/calendar/events/${id}`, { method: 'DELETE' })
 }
 
 export interface CreateTaskPayload {
@@ -82,19 +113,21 @@ export interface CreateTaskPayload {
 export async function apiCreateTask(payload: CreateTaskPayload): Promise<CalTask> {
   return apiFetch<CalTask>('/calendar/tasks', {
     method: 'POST',
-    body: JSON.stringify({
-      date: payload.date,
-      title: payload.title,
-      description: payload.description,
-      tipo: payload.tipo,
-      cuadrante: payload.cuadrante,
-      event_id: payload.eventId,
-      time: payload.time,
-      end_time: payload.endTime,
-      all_day: payload.allDay ?? false,
-      completed: payload.completed ?? false,
-      recurrence: payload.recurrence ?? 'none',
-    }),
+    body: JSON.stringify(
+      withInstitutionBody({
+        date: payload.date,
+        title: payload.title,
+        description: payload.description,
+        tipo: payload.tipo,
+        cuadrante: payload.cuadrante,
+        event_id: payload.eventId,
+        time: payload.time,
+        end_time: payload.endTime,
+        all_day: payload.allDay ?? false,
+        completed: payload.completed ?? false,
+        recurrence: payload.recurrence ?? 'none',
+      }),
+    ),
   })
 }
 

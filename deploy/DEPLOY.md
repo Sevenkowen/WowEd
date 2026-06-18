@@ -15,7 +15,7 @@ No incluimos Postgres en Docker porque ya lo tenés en el VPS.
 
 - Docker Engine + Docker Compose v2 (`docker compose`)
 - Git (o subís el código por SFTP)
-- PostgreSQL accesible (migración `backend/migrations/001_task_calendar_fields.sql` ya aplicada)
+- PostgreSQL accesible (migraciones en `backend/migrations/`, se aplican al arrancar el contenedor `api`)
 - Puertos: `80` (y `443` si más adelante agregás HTTPS)
 
 ## 1. Subir el código al servidor
@@ -77,9 +77,26 @@ Probar:
 
 ```bash
 cd /opt/wowed
+bash deploy/remote-deploy.sh
+```
+
+O manualmente:
+
+```bash
+cd /opt/wowed
 git pull
 docker compose up -d --build
 ```
+
+Las migraciones SQL (`backend/migrations/*.sql`) se ejecutan automáticamente al iniciar el contenedor `api`.
+
+Verificá el esquema:
+
+```bash
+curl http://IP_DEL_VPS/api/health/db-schema
+```
+
+Todos los flags deben ser `true`.
 
 Solo backend:
 

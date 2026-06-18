@@ -1,5 +1,6 @@
 import type { CalTask } from '@/data/calendarioEscolarTypes'
 import { formatEventTimeRange } from '@/utils/calendarioEventTime'
+import { timedGridBlockLayoutClass } from '@/utils/calendarioTimedGridStyles'
 
 const monthBubbleBase =
   'block w-full min-w-0 truncate rounded px-1.5 py-px text-left text-[11px] font-normal leading-[18px] transition-[filter]'
@@ -42,11 +43,8 @@ export function taskDisplayTime(task: CalTask): string | null {
   return task.time
 }
 
-const timedTaskBlockBase =
-  'absolute inset-x-1 inset-y-px flex flex-col overflow-hidden rounded px-1.5 py-px text-left shadow-sm bg-[#8E24AA] text-white'
-
 export function timedTaskBlockClass(): string {
-  return timedTaskBlockBase
+  return `${timedGridBlockLayoutClass} bg-[#8E24AA]`
 }
 
 export function timedTaskResizeHandleClass(): string {

@@ -56,6 +56,7 @@ class CreateTaskBody(BaseModel):
     all_day: bool = False
     completed: bool = False
     recurrence: str = "none"
+    institution_id: str | None = None
 
 
 class MoveEventBody(BaseModel):
@@ -74,6 +75,16 @@ class MoveTaskBody(BaseModel):
 
 class ResizeTaskBody(BaseModel):
     end_time: str
+
+
+class PatchEventBody(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    date: str | None = None
+    start_time: str | None = Field(None, description="HH:mm")
+    end_time: str | None = Field(None, description="HH:mm")
+    all_day: bool | None = None
+    event_type: str | None = None
 
 
 class PatchTaskBody(BaseModel):

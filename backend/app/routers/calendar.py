@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.deps import resolve_institution_id
 from app.models.calendar import CalendarEvent, Task
 from app.schemas.calendar import (
     CalEventDto,
@@ -16,11 +17,13 @@ from app.schemas.calendar import (
     EventsByDateResponse,
     MoveEventBody,
     MoveTaskBody,
+    PatchEventBody,
     PatchTaskBody,
     ResizeEventBody,
     ResizeTaskBody,
     TasksByDateResponse,
 )
+from app.services.institution_seed import ensure_institution_exists
 from app.services.mappers import combine_date_time, event_to_dto, parse_hhmm, task_to_dto
 from app.services.recurrence import recurrence_from_preset
 
@@ -48,13 +51,16 @@ def _reject_past_modify(existing_start_date, new_date_str: str | None = None) ->
 
 
 def _default_institution(body_institution: str | None) -> uuid.UUID | None:
-    raw = body_institution or settings.default_institution_id
-    if not raw:
-        return None
     try:
-        return uuid.UUID(raw)
-    except ValueError:
-        return None
+        return resolve_institution_id(body_institution)
+    except HTTPException:
+        raw = settings.default_institution_id
+        if not raw:
+            return None
+        try:
+            return uuid.UUID(raw)
+        except ValueError:
+            return None
 
 
 @router.get("/events", response_model=EventsByDateResponse)
@@ -91,6 +97,8 @@ def list_events(
 def create_event(body: CreateEventBody, db: Session = Depends(get_db)):
     _reject_past_date(body.date)
     inst = _default_institution(body.institution_id)
+    if inst:
+        ensure_institution_exists(db, inst)
     recurrence_id = None
     if body.recurrence and body.recurrence != "none":
         from datetime import date as date_cls
@@ -161,6 +169,78 @@ def resize_event(event_id: str, body: ResizeEventBody, db: Session = Depends(get
     return event_to_dto(ev)
 
 
+@router.patch("/events/{event_id}", response_model=CalEventDto)
+def patch_event(event_id: str, body: PatchEventBody, db: Session = Depends(get_db)):
+    ev = db.get(CalendarEvent, uuid.UUID(event_id))
+    if not ev:
+        raise HTTPException(404, "Evento no encontrado")
+    existing_date = ev.start_time.date() if ev.start_time else None
+    if body.date is not None:
+        _reject_past_modify(existing_date, body.date)
+    elif existing_date:
+        _reject_past_modify(existing_date)
+
+    if body.title is not None:
+        title = body.title.strip()
+        if not title:
+            raise HTTPException(400, "El título no puede estar vacío")
+        ev.title = title
+    if body.description is not None:
+        ev.description = body.description.strip() or None
+    if body.event_type is not None:
+        ev.visibility_scope = body.event_type
+
+    date_str = body.date or (ev.start_time.strftime("%Y-%m-%d") if ev.start_time else None)
+    if not date_str:
+        raise HTTPException(400, "Fecha inválida")
+
+    if body.all_day is True:
+        ev.start_time = combine_date_time(date_str, "00:00")
+        ev.end_time = combine_date_time(date_str, "23:59")
+    elif body.all_day is False or body.start_time or body.end_time:
+        start_h = body.start_time
+        if not start_h and ev.start_time:
+            start_h = ev.start_time.strftime("%H:%M")
+        start_h = start_h or "09:00"
+        end_h = body.end_time
+        if not end_h and ev.end_time:
+            end_h = ev.end_time.strftime("%H:%M")
+        end_h = end_h or "10:00"
+        start = combine_date_time(date_str, start_h)
+        end = combine_date_time(date_str, end_h)
+        if end <= start:
+            end = start + timedelta(hours=1)
+        ev.start_time = start
+        ev.end_time = end
+    elif body.date is not None and ev.start_time:
+        start_h = ev.start_time.strftime("%H:%M")
+        end_h = ev.end_time.strftime("%H:%M") if ev.end_time else start_h
+        start = combine_date_time(date_str, start_h)
+        end = combine_date_time(date_str, end_h)
+        if end <= start:
+            end = start + timedelta(hours=1)
+        ev.start_time = start
+        ev.end_time = end
+
+    db.commit()
+    db.refresh(ev)
+    return event_to_dto(ev)
+
+
+@router.delete("/events/{event_id}", status_code=204)
+def delete_event(event_id: str, db: Session = Depends(get_db)):
+    ev = db.get(CalendarEvent, uuid.UUID(event_id))
+    if not ev:
+        raise HTTPException(404, "Evento no encontrado")
+    existing_date = ev.start_time.date() if ev.start_time else None
+    _reject_past_modify(existing_date)
+    linked = db.scalars(select(Task).where(Task.linked_event_id == ev.id)).all()
+    for task in linked:
+        task.linked_event_id = None
+    db.delete(ev)
+    db.commit()
+
+
 @router.get("/tasks", response_model=TasksByDateResponse)
 def list_tasks(
     from_date: str | None = Query(None, alias="from"),
@@ -194,11 +274,22 @@ def create_task(body: CreateTaskBody, db: Session = Depends(get_db)):
     from datetime import date as date_cls
 
     _reject_past_date(body.date)
-    linked = uuid.UUID(body.event_id) if body.event_id else None
+    linked: uuid.UUID | None = None
+    if body.event_id:
+        try:
+            linked = uuid.UUID(body.event_id)
+        except ValueError as exc:
+            raise HTTPException(400, "event_id inválido") from exc
+        if not db.get(CalendarEvent, linked):
+            raise HTTPException(404, "Evento no encontrado para vincular la tarea")
     start_t = parse_hhmm(body.time) if body.time and not body.all_day else None
     end_t = parse_hhmm(body.end_time) if body.end_time and not body.all_day else None
     if start_t and not end_t:
         end_t = (datetime.combine(date_cls.today(), start_t) + timedelta(minutes=30)).time()
+
+    inst = _default_institution(body.institution_id)
+    if inst:
+        ensure_institution_exists(db, inst)
 
     task = Task(
         id=uuid.uuid4(),
@@ -214,6 +305,7 @@ def create_task(body: CreateTaskBody, db: Session = Depends(get_db)):
         cuadrante=body.cuadrante,
         completed=body.completed,
         recurrence_preset=body.recurrence if body.recurrence != "none" else None,
+        institution_id=_default_institution(body.institution_id),
     )
     db.add(task)
     db.commit()

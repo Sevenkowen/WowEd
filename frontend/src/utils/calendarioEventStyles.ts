@@ -1,4 +1,6 @@
 import type { CalEvent } from '@/data/calendarioEscolarDemo'
+import { resolveEventTypeColor } from '@/composables/useCalendarioCatalogs'
+import { timedGridBlockLayoutClass } from '@/utils/calendarioTimedGridStyles'
 
 type EventTypeStyle = {
   bubble: string
@@ -72,8 +74,16 @@ export function timedEventDragPreviewClass(): string {
 }
 
 /** Bloque en vista día/semana (estilo Google Calendar) */
-export function timedEventBlockClass(event: CalEvent): string {
-  return `${styleForEvent(event).bubble} absolute inset-x-1 inset-y-px flex flex-col overflow-hidden rounded px-1.5 py-px text-left shadow-sm`
+export function timedEventBlockClass(_event?: CalEvent): string {
+  return timedGridBlockLayoutClass
+}
+
+export function eventTypeBgStyle(eventType?: string): { backgroundColor: string } {
+  return { backgroundColor: resolveEventTypeColor(eventType) }
+}
+
+export function eventTypeBgStyleFromEvent(event: CalEvent): { backgroundColor: string } {
+  return eventTypeBgStyle(event.eventType)
 }
 
 export function timedEventTimeClass(): string {
@@ -85,8 +95,8 @@ export function timedEventTitleClass(): string {
 }
 
 /** Burbuja en la grilla del calendario mensual */
-export function monthEventBubbleClass(event: CalEvent): string {
-  return styleForEvent(event).bubble
+export function monthEventBubbleClass(_event?: CalEvent): string {
+  return `${monthBubbleBase} text-white transition-[filter] hover:brightness-95`
 }
 
 /** Tarjeta en el panel lateral de eventos del día */
@@ -98,13 +108,25 @@ export function sidebarEventDotClass(event: CalEvent): string {
   return `size-2 shrink-0 rounded-full ${styleForEvent(event).dot}`
 }
 
-export function eventColorSquareClass(event: CalEvent): string {
-  return `size-3.5 shrink-0 rounded-sm ${styleForEvent(event).dot}`
+export function eventColorSquareClass(_event: CalEvent): string {
+  return 'size-3.5 shrink-0 rounded-sm'
+}
+
+export function eventColorSquareStyle(event: CalEvent): { backgroundColor: string } {
+  return eventTypeBgStyleFromEvent(event)
 }
 
 /** Píldora en popover de día (vista mensual) */
 export function dayPopoverEventPillClass(event: CalEvent): string {
   return `${styleForEvent(event).bubble} w-full cursor-pointer rounded px-2.5 py-1.5 text-left text-sm font-normal hover:brightness-95`
+}
+
+export function eventHeaderBgClass(_event: CalEvent): string {
+  return ''
+}
+
+export function eventHeaderStyle(event: CalEvent): { backgroundColor: string } {
+  return eventTypeBgStyleFromEvent(event)
 }
 
 export function sidebarEventTimeClass(event: CalEvent): string {
