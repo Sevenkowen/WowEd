@@ -65,7 +65,6 @@ const superadminLinks: NavLink[] = [
 ]
 
 const superadminSecondaryLinks: NavLink[] = [
-  { name: 'Personal y Usuarios', to: '/superadmin/usuarios', icon: UserGroupIcon },
   { name: 'Roles Institucionales', to: '/superadmin/roles', icon: ShieldCheckIcon },
 ]
 
@@ -74,8 +73,8 @@ const superadminEmpresaSection: NavSection = {
   name: 'Empresa',
   icon: BriefcaseIcon,
   links: [
-    { name: 'Instituciones', to: '/superadmin/instituciones', icon: BuildingOffice2Icon },
     { name: 'Administradores', to: '/superadmin/administradores', icon: KeyIcon },
+    { name: 'Instituciones', to: '/superadmin/instituciones', icon: BuildingOffice2Icon },
   ],
 }
 
@@ -84,14 +83,14 @@ const superadminEstructuraSection: NavSection = {
   name: 'Colegios y Materias',
   icon: AcademicCapIcon,
   links: [
-    { name: 'Colegios y Grados', to: '/superadmin/estructura/colegios', icon: BuildingOffice2Icon },
+    { name: 'Directivos', to: '/superadmin/usuarios', icon: UserGroupIcon },
     { name: 'Profesores', to: '/superadmin/estructura/profesores', icon: UserGroupIcon },
+    { name: 'Colegios y Grados', to: '/superadmin/estructura/colegios', icon: BuildingOffice2Icon },
   ],
 }
 
 const adminLinks: NavLink[] = [
   { name: 'Dashboard', to: '/admin/dashboard', icon: HomeIcon },
-  { name: 'Personal y Usuarios', to: '/admin/usuarios', icon: UserGroupIcon },
   { name: 'Roles Institucionales', to: '/admin/roles', icon: ShieldCheckIcon },
 ]
 
@@ -100,8 +99,9 @@ const adminEstructuraSection: NavSection = {
   name: 'Colegios y Materias',
   icon: AcademicCapIcon,
   links: [
-    { name: 'Colegios y Grados', to: '/admin/estructura/colegios', icon: BuildingOffice2Icon },
+    { name: 'Directivos', to: '/admin/usuarios', icon: UserGroupIcon },
     { name: 'Profesores', to: '/admin/estructura/profesores', icon: UserGroupIcon },
+    { name: 'Colegios y Grados', to: '/admin/estructura/colegios', icon: BuildingOffice2Icon },
   ],
 }
 
@@ -221,8 +221,13 @@ const superadminEmpresaActive = computed(
     route.path.startsWith('/superadmin/instituciones') ||
     route.path.startsWith('/superadmin/administradores'),
 )
-const superadminEstructuraActive = computed(() => route.path.startsWith('/superadmin/estructura'))
-const adminEstructuraActive = computed(() => route.path.startsWith('/admin/estructura'))
+const superadminEstructuraActive = computed(
+  () =>
+    route.path.startsWith('/superadmin/estructura') || route.path.startsWith('/superadmin/usuarios'),
+)
+const adminEstructuraActive = computed(
+  () => route.path.startsWith('/admin/estructura') || route.path.startsWith('/admin/usuarios'),
+)
 
 const showSuperadminEmpresaSection = computed(() => filteredSuperadminEmpresaSection.value.links.length > 0)
 const showSuperadminEstructuraSection = computed(() => filteredSuperadminEstructuraSection.value.links.length > 0)

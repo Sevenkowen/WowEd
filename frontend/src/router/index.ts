@@ -28,7 +28,7 @@ const mainChildren: RouteRecordRaw[] = [
         path: 'usuarios',
         name: 'admin-usuarios',
         component: () => import('@/pages/admin/AdminUsuariosPage.vue'),
-        meta: { title: 'Personal y Usuarios' },
+        meta: { title: 'Directivos' },
       },
       {
         path: 'roles',
@@ -56,6 +56,7 @@ const mainChildren: RouteRecordRaw[] = [
         component: () => import('@/pages/admin/AdminEstructuraPage.vue'),
         meta: { title: 'Profesores', estructuraSection: 'profesores' },
       },
+      { path: 'directores', redirect: { name: 'admin-usuarios' } },
       { path: 'directores', redirect: { name: 'admin-usuarios' } },
       { path: 'docentes', redirect: { name: 'admin-usuarios' } },
       { path: 'asignacion-directores', redirect: { name: 'admin-estructura-colegios' } },
@@ -98,7 +99,7 @@ const mainChildren: RouteRecordRaw[] = [
         path: 'usuarios',
         name: 'superadmin-usuarios',
         component: () => import('@/pages/superadmin/SuperadminUsuariosPage.vue'),
-        meta: { title: 'Personal y Usuarios' },
+        meta: { title: 'Directivos' },
       },
       {
         path: 'roles',

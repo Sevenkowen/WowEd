@@ -66,7 +66,7 @@ export const MODULE_ACCESS_REGISTRY: ModuleAccessDefinition[] = [
   { key: 'estructura_escolar', label: 'Estructura Escolar', category: 'institucion', scopes: ['school'], route: '/estructura-escolar' },
   { key: 'institutions', label: 'Instituciones', category: 'plataforma', scopes: ['platform'], route: '/superadmin/instituciones' },
   { key: 'administradores', label: 'Administradores', category: 'plataforma', scopes: ['platform'], route: '/superadmin/administradores' },
-  { key: 'personnel', label: 'Personal y Usuarios', category: 'plataforma', scopes: ['platform', 'institution'], route: '/superadmin/usuarios' },
+  { key: 'personnel', label: 'Directivos', category: 'plataforma', scopes: ['platform', 'institution'], route: '/superadmin/usuarios' },
   { key: 'roles', label: 'Roles Institucionales', category: 'plataforma', scopes: ['platform', 'institution'], route: '/superadmin/roles' },
   { key: 'estructura', label: 'Colegios y Materias', category: 'plataforma', scopes: ['platform', 'institution'], route: '/superadmin/estructura/colegios' },
 ]
@@ -109,8 +109,10 @@ export const ROUTE_TO_MODULE_KEY: Record<string, string> = {
   '/admin/dashboard': 'dashboard',
   '/superadmin/dashboard': 'dashboard',
   '/admin/usuarios': 'personnel',
+  '/superadmin/usuarios': 'personnel',
   '/admin/roles': 'roles',
   '/admin/estructura': 'estructura',
+  '/superadmin/estructura': 'estructura',
 }
 
 export function routeModuleKey(path: string): string | undefined {

@@ -166,9 +166,9 @@ onUnmounted(() => {
           <UserGroupIcon class="size-6" aria-hidden="true" />
         </div>
         <div class="min-w-0">
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Personal y Subordinados</h2>
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Directivos</h2>
           <p class="mt-1 max-w-3xl text-sm text-muted">
-            Control de Acceso Basado en Roles (RBAC) y Creación en Cascada.
+            Gestión de usuarios institucionales con control de acceso basado en roles (RBAC).
           </p>
         </div>
       </div>
@@ -221,7 +221,7 @@ onUnmounted(() => {
       <div class="shrink-0 border-b border-gray-100 bg-gray-50 px-5 py-4 dark:border-white/10 dark:bg-gray-950/50">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex flex-wrap items-center gap-2">
-            <h3 class="heading-section">Personal registrado</h3>
+            <h3 class="heading-section">Directivos registrados</h3>
             <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700 dark:bg-white/10 dark:text-gray-300">
               {{ loading ? '…' : `${totalPersonnel} ${totalPersonnel === 1 ? 'resultado' : 'resultados'}` }}
             </span>
