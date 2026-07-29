@@ -3,10 +3,12 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useCalendarClock } from '@/composables/useCalendarClock'
 import { useCalendarioNowLine } from '@/composables/useCalendarioNowLine'
 import { useCalendarioPastSlots } from '@/composables/useCalendarioPastSlots'
-import type { CalEvent } from '@/data/calendarioEscolarDemo'
+import type { CalEvent } from '@/data/calendarioEscolarTypes'
 import type { CalTask } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
 import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
+import { useCalendarioSearchFocusHandler } from '@/composables/useCalendarioSearchFocusHandler'
+import { findCalendarioEvent, findCalendarioTask } from '@/composables/useCalendarioSearch'
 import { useCalendarioGridDrag, type CalendarioDragItem } from '@/composables/useCalendarioGridDrag'
 import { useCalendarioGridResize } from '@/composables/useCalendarioGridResize'
 import { taskTipoOf } from '@/data/calendarioTareaOptions'
@@ -62,7 +64,12 @@ import {
   calendarioHourCount,
   calendarioHourLabel,
 } from '@/utils/calendarioGridConstants'
-import { timedGridItemLiClass, timedGridResizingClass, timedGridSyncingClass } from '@/utils/calendarioTimedGridStyles'
+import { timedGridItemLiClass, timedGridResizingClass, timedGridSyncingClass, timedGridPastClass } from '@/utils/calendarioTimedGridStyles'
+import {
+  calPastClass,
+  isCalendarEventElapsed,
+  isCalendarTaskElapsed,
+} from '@/utils/calendarioPastVisual'
 
 defineOptions({ name: 'CalendarioEscolarWeek' })
 
@@ -86,7 +93,7 @@ const gridRowsStyle = calendarioGridRowsStyle(hours.length)
 const dayStartMinutes = DAY_START_HOUR * 60
 
 const { porFecha: eventosPorFecha, moveEvent, resizeEvent } = useCalendarioEscolarEvents()
-const { tareasDelDia, moveTask, resizeTask } = useCalendarioEscolarTasks()
+const { tareasDelDia, moveTask, resizeTask, todasLasTareas } = useCalendarioEscolarTasks()
 
 const gridRef = ref<HTMLElement | null>(null)
 const scrollContainerRef = ref<HTMLElement | null>(null)
@@ -440,6 +447,18 @@ function openTaskDetail(task: CalTask): void {
   detalleOpen.value = true
 }
 
+useCalendarioSearchFocusHandler({
+  selectedDate,
+  contentMode,
+  navigateToDate: (date) => {
+    weekStart.value = startOfWeekMonday(parseYmd(date))
+  },
+  openEventDetail,
+  openTaskDetail,
+  findEvent: (id) => findCalendarioEvent(id, eventosPorFecha.value),
+  findTask: (id) => findCalendarioTask(id, todasLasTareas.value),
+})
+
 function taskSpan(task: WeekTimedTask): number {
   return taskPreviewSpan(task.id, task.gridSpan)
 }
@@ -452,10 +471,21 @@ function timedGridBlockStateClass(
   isResizing: boolean,
   isSyncingResize: boolean,
   isSyncingDrag: boolean,
+  isPast = false,
 ): string {
   if (isResizing) return timedGridResizingClass()
   if (isSyncingResize || isSyncingDrag) return timedGridSyncingClass()
+  if (isPast) return timedGridPastClass()
   return ''
+}
+
+function weekEventElapsed(ev: CalEvent, date: string): boolean {
+  return isCalendarEventElapsed(ev, date, now.value)
+}
+
+function weekTaskElapsed(task: CalTask, date?: string): boolean {
+  if (date && isDateBeforeToday(date, now.value)) return true
+  return isCalendarTaskElapsed(task, now.value)
 }
 
 function taskTimeLabel(task: CalTask): string {
@@ -678,7 +708,11 @@ function linkedEventName(eventId: string): string | null {
                   >
                     <button
                       type="button"
-                      :class="[monthEventBubbleClass(ev), 'max-w-full cursor-pointer text-left']"
+                      :class="[
+                        monthEventBubbleClass(ev),
+                        'max-w-full cursor-pointer text-left',
+                        calPastClass(weekEventElapsed(ev, day.date), true),
+                      ]"
                       :style="eventTypeBgStyleFromEvent(ev)"
                       :title="ev.name"
                       @click="openEventDetail(ev)"
@@ -692,7 +726,10 @@ function linkedEventName(eventId: string): string | null {
                       <li v-for="task in tasksForEvent(ev.id, day.date)" :key="task.id">
                         <button
                           type="button"
-                          class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[10px] font-medium text-violet-800 hover:bg-violet-500/10 dark:text-violet-200 dark:hover:bg-violet-500/15"
+                          :class="[
+                            'flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[10px] font-medium text-violet-800 hover:bg-violet-500/10 dark:text-violet-200 dark:hover:bg-violet-500/15',
+                            calPastClass(weekTaskElapsed(task, day.date), true),
+                          ]"
                           @click.stop="openTaskDetail(task)"
                         >
                           <span class="size-1.5 shrink-0 rounded-full bg-violet-500" aria-hidden="true" />
@@ -717,10 +754,16 @@ function linkedEventName(eventId: string): string | null {
                   :key="`tasks-${day.date}`"
                   class="space-y-1.5 px-1.5 py-2"
                 >
-                  <div
+                  <button
                     v-for="task in weekTasksSinHorario(day.date)"
                     :key="task.id"
-                    :class="[sidebarTaskCardClass(!!task.eventId), 'text-xs']"
+                    type="button"
+                    :class="[
+                      sidebarTaskCardClass(!!task.eventId),
+                      'w-full cursor-pointer text-left text-xs transition-colors hover:bg-violet-100/60 dark:hover:bg-violet-950/60',
+                      calPastClass(weekTaskElapsed(task, day.date), true),
+                    ]"
+                    @click="openTaskDetail(task)"
                   >
                     <div class="flex items-start gap-1.5">
                       <span :class="[sidebarTaskDotClass(), 'mt-0.5']" aria-hidden="true" />
@@ -735,7 +778,7 @@ function linkedEventName(eventId: string): string | null {
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 </div>
               </div>
             </div>
@@ -838,6 +881,7 @@ function linkedEventName(eventId: string): string | null {
                     isResizingTask(task.id),
                     isSyncingTask(task.id),
                     isSyncingDragItem(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow)),
+                    weekTaskElapsed(task, task.date),
                   ),
                 ]"
                 @pointerdown="onItemPointerDown(dragItemPayload('task', task.id, taskSpan(task), task.colStart, task.gridRow), $event)"
@@ -874,6 +918,7 @@ function linkedEventName(eventId: string): string | null {
                     isResizingEvent(ev.id),
                     isSyncingEvent(ev.id),
                     isSyncingDragItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.colStart, ev.gridRow)),
+                    weekEventElapsed(ev, ev.date),
                   ),
                 ]"
                 :style="eventTypeBgStyleFromEvent(ev)"

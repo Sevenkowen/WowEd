@@ -1,6 +1,13 @@
 from pydantic import BaseModel, Field
 
 
+class AssigneeDto(BaseModel):
+    id: str
+    displayName: str
+    email: str | None = None
+    active: bool = True
+
+
 class CalEventDto(BaseModel):
     """Forma compatible con el frontend (CalEvent)."""
 
@@ -13,6 +20,7 @@ class CalEventDto(BaseModel):
     description: str | None = None
     eventType: str | None = None
     allDay: bool = False
+    assignees: list[AssigneeDto] = Field(default_factory=list)
 
 
 class CalTaskDto(BaseModel):
@@ -30,6 +38,7 @@ class CalTaskDto(BaseModel):
     endTime: str | None = None
     allDay: bool = False
     recurrence: str | None = None
+    assignees: list[AssigneeDto] = Field(default_factory=list)
 
 
 class CreateEventBody(BaseModel):
@@ -42,6 +51,7 @@ class CreateEventBody(BaseModel):
     event_type: str | None = None
     recurrence: str = "none"
     institution_id: str | None = None
+    assignee_ids: list[str] = Field(default_factory=list)
 
 
 class CreateTaskBody(BaseModel):
@@ -57,6 +67,7 @@ class CreateTaskBody(BaseModel):
     completed: bool = False
     recurrence: str = "none"
     institution_id: str | None = None
+    assignee_ids: list[str] = Field(default_factory=list)
 
 
 class MoveEventBody(BaseModel):
@@ -85,6 +96,7 @@ class PatchEventBody(BaseModel):
     end_time: str | None = Field(None, description="HH:mm")
     all_day: bool | None = None
     event_type: str | None = None
+    assignee_ids: list[str] | None = None
 
 
 class PatchTaskBody(BaseModel):
@@ -98,6 +110,7 @@ class PatchTaskBody(BaseModel):
     end_time: str | None = None
     all_day: bool | None = None
     event_id: str | None = None
+    assignee_ids: list[str] | None = None
 
 
 class EventsByDateResponse(BaseModel):

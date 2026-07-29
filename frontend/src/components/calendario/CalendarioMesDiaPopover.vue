@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/20/solid'
-import type { CalEvent } from '@/data/calendarioEscolarDemo'
+import type { CalEvent } from '@/data/calendarioEscolarTypes'
 import type { CalTask } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
 import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
 import { dayPopoverEventPillClass } from '@/utils/calendarioEventStyles'
 import { dayPopoverTaskPillClass, taskDisplayTitle } from '@/utils/calendarioTaskStyles'
 import { positionBelowAnchor } from '@/utils/calendarioPopoverPosition'
+import { useCalendarClock } from '@/composables/useCalendarClock'
+import {
+  calPastClass,
+  isCalendarEventElapsed,
+  isCalendarTaskElapsed,
+} from '@/utils/calendarioPastVisual'
+import { isDateBeforeToday } from '@/utils/calendarioDates'
 
 defineOptions({ name: 'CalendarioMesDiaPopover' })
 
@@ -34,6 +41,19 @@ defineExpose({ getPanelRect })
 
 const { eventosDelDia } = useCalendarioEscolarEvents()
 const { tareasDelDia } = useCalendarioEscolarTasks()
+const now = useCalendarClock()
+
+function popoverEventElapsed(ev: CalEvent): boolean {
+  if (!date.value) return false
+  if (isDateBeforeToday(date.value, now.value)) return true
+  return isCalendarEventElapsed(ev, date.value, now.value)
+}
+
+function popoverTaskElapsed(task: CalTask): boolean {
+  if (!date.value) return false
+  if (isDateBeforeToday(date.value, now.value)) return true
+  return isCalendarTaskElapsed(task, now.value)
+}
 
 const events = computed(() => eventosDelDia(date.value))
 const tasks = computed(() => tareasDelDia(date.value))
@@ -98,12 +118,20 @@ watch(open, (v) => {
 
         <ul class="max-h-64 space-y-1 overflow-y-auto px-2 pb-2">
           <li v-for="ev in events" :key="`ev-${ev.id}`">
-            <button type="button" :class="dayPopoverEventPillClass(ev)" @click="emit('select-event', ev)">
+            <button
+              type="button"
+              :class="[dayPopoverEventPillClass(ev), calPastClass(popoverEventElapsed(ev), true)]"
+              @click="emit('select-event', ev)"
+            >
               {{ ev.name }}
             </button>
           </li>
           <li v-for="task in tasks" :key="`task-${task.id}`">
-            <button type="button" :class="dayPopoverTaskPillClass()" @click="emit('select-task', task)">
+            <button
+              type="button"
+              :class="[dayPopoverTaskPillClass(), calPastClass(popoverTaskElapsed(task), true)]"
+              @click="emit('select-task', task)"
+            >
               {{ taskDisplayTitle(task) }}
             </button>
           </li>

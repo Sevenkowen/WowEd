@@ -17,6 +17,8 @@ import {
 } from '@/utils/calendarioDates'
 import type { CalRecurrencePreset } from '@/utils/calendarioRecurrence'
 import { expandRecurrenceDates } from '@/utils/calendarioRecurrence'
+import { moveLinkedTasksInMap } from '@/utils/calendarioTaskLinks'
+
 const apiPorFecha = ref<Record<string, CalTask[]>>({})
 
 function patchTaskInMap(
@@ -70,6 +72,14 @@ async function loadAll() {
   apiPorFecha.value = await fetchTasksPorFecha()
 }
 
+export function syncLinkedTasksAfterEventMove(eventId: string, newDate: string): void {
+  apiPorFecha.value = moveLinkedTasksInMap(apiPorFecha.value, eventId, newDate)
+}
+
+export async function reloadTasksApi(): Promise<void> {
+  await loadAll()
+}
+
 void loadAll()
 
 function flattenTasks(map: Record<string, CalTask[]>): CalTask[] {
@@ -109,6 +119,7 @@ export function useCalendarioEscolarTasksApi() {
       allDay: input.allDay,
       completed: false,
       recurrence: input.recurrence,
+      assigneeIds: input.assigneeIds,
     })
     await loadAll()
     return task
@@ -229,6 +240,7 @@ export function useCalendarioEscolarTasksApi() {
       end_time: allDay ? null : endTime,
       all_day: allDay,
       event_id: eventId,
+      assignee_ids: patch.assigneeIds,
     })
     await loadAll()
     return updated

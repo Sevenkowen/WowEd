@@ -1,6 +1,31 @@
 import type { CalTaskCuadrante, CalTaskTipo } from '@/data/calendarioTareaOptions'
 import type { CalRecurrencePreset } from '@/utils/calendarioRecurrence'
 
+export interface CalAssignee {
+  id: string
+  displayName: string
+  email?: string
+  /** false si el usuario ya no pertenece a la institución (p. ej. fue dado de baja del equipo). */
+  active?: boolean
+}
+
+export interface CalEvent {
+  id: string
+  name: string
+  time: string
+  /** Inicio ISO local (YYYY-MM-DDTHH:mm) */
+  datetime: string
+  /** Fin ISO local; usado en vista día/semana para la duración */
+  endDatetime?: string
+  href: string
+  description?: string
+  eventType?: string
+  /** Evento de día completo (sin franja horaria en la grilla). */
+  allDay?: boolean
+  recurrence?: CalRecurrencePreset
+  assignees?: CalAssignee[]
+}
+
 /** Tarea del calendario escolar; puede vincularse a un evento o ser suelta. */
 export interface CalTask {
   id: string
@@ -22,4 +47,6 @@ export interface CalTask {
   allDay?: boolean
   /** Regla de repetición con la que se creó la instancia. */
   recurrence?: CalRecurrencePreset
+  /** Personas asignadas a la tarea. */
+  assignees?: CalAssignee[]
 }

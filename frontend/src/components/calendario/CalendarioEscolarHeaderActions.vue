@@ -4,6 +4,7 @@ import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/vue'
 import { ChevronDownIcon } from '@heroicons/vue/20/solid'
 import { CalendarDaysIcon, CheckCircleIcon } from '@heroicons/vue/24/outline'
 import type { CalendarioContentMode, CalendarioDisplayView } from '@/utils/calendarioDates'
+import CalendarioSearch from '@/components/calendario/CalendarioSearch.vue'
 import {
   gcalPillBorder,
   gcalToolbarBtn,
@@ -40,6 +41,7 @@ function pickView(id: CalendarioDisplayView): void {
 
 <template>
   <div class="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+    <CalendarioSearch />
     <Menu as="div" class="relative">
       <MenuButton
         type="button"

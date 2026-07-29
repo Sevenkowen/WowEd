@@ -1,14 +1,22 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ClockIcon } from '@heroicons/vue/20/solid'
-import type { CalEvent } from '@/data/calendarioEscolarDemo'
+import { useCalendarClock } from '@/composables/useCalendarClock'
+import type { CalEvent } from '@/data/calendarioEscolarTypes'
 import type { CalTask } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
 import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
-import { formatYmd, isDateBeforeToday, mondayIndex } from '@/utils/calendarioDates'
+import { formatYmd, isDateBeforeToday, mondayIndex, parseYmd } from '@/utils/calendarioDates'
+import { useCalendarioSearchFocusHandler } from '@/composables/useCalendarioSearchFocusHandler'
+import { findCalendarioEvent, findCalendarioTask } from '@/composables/useCalendarioSearch'
 import { monthEventBubbleClass, eventTypeBgStyleFromEvent } from '@/utils/calendarioEventStyles'
 import { monthTaskBubbleClass, taskDisplayTitle } from '@/utils/calendarioTaskStyles'
 import { standaloneTasksForDay } from '@/utils/calendarioTaskLinks'
+import {
+  calPastClass,
+  isCalendarEventElapsed,
+  isCalendarTaskElapsed,
+} from '@/utils/calendarioPastVisual'
 import type { CalendarioContentMode, CalendarioDisplayView } from '@/utils/calendarioDates'
 import {
   gcalBorder,
@@ -44,7 +52,18 @@ defineEmits<{
 }>()
 
 const { porFecha } = useCalendarioEscolarEvents()
-const { porFecha: tareasPorFecha } = useCalendarioEscolarTasks()
+const { porFecha: tareasPorFecha, todasLasTareas } = useCalendarioEscolarTasks()
+const now = useCalendarClock()
+
+function monthEventElapsed(event: CalEvent, day: DayCell): boolean {
+  if (day.isPast) return true
+  return isCalendarEventElapsed(event, day.date, now.value)
+}
+
+function monthTaskElapsed(task: CalTask, day: DayCell): boolean {
+  if (day.isPast) return true
+  return isCalendarTaskElapsed(task, now.value)
+}
 
 interface DayCell {
   date: string
@@ -195,6 +214,25 @@ function openDetail(item: CalendarioDetalle, anchor: DOMRect) {
   detailOpen.value = true
 }
 
+useCalendarioSearchFocusHandler({
+  selectedDate,
+  contentMode,
+  navigateToDate: (date) => {
+    const d = parseYmd(date)
+    view.value = new Date(d.getFullYear(), d.getMonth(), 1)
+  },
+  openEventDetail: (event) => {
+    eventEditId.value = event.id
+    eventEditOpen.value = true
+  },
+  openTaskDetail: (task) => {
+    taskEditId.value = task.id
+    taskEditOpen.value = true
+  },
+  findEvent: (id) => findCalendarioEvent(id, porFecha.value),
+  findTask: (id) => findCalendarioTask(id, todasLasTareas.value),
+})
+
 function selectDayFromElement(date: string, el: HTMLElement): void {
   const day = days.value.find((d) => d.date === date)
   const hasItems = day ? dayItemCount(day) > 0 : false
@@ -338,7 +376,10 @@ const weekDays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'] as const
             <li v-for="event in day.events.slice(0, 2)" :key="`ev-${event.id}`">
               <button
                 type="button"
-                :class="monthEventBubbleClass(event)"
+                :class="[
+                  monthEventBubbleClass(event),
+                  calPastClass(monthEventElapsed(event, day), true),
+                ]"
                 :style="eventTypeBgStyleFromEvent(event)"
                 :title="event.name"
                 @click="onEventBubbleClick(event, $event)"
@@ -352,7 +393,7 @@ const weekDays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'] as const
             >
               <button
                 type="button"
-                :class="monthTaskBubbleClass()"
+                :class="[monthTaskBubbleClass(), calPastClass(monthTaskElapsed(task, day), true)]"
                 :title="taskDisplayTitle(task)"
                 @click="onTaskBubbleClick(task, $event)"
               >

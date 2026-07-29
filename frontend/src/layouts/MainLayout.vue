@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   Dialog,
   DialogPanel,
@@ -16,10 +16,13 @@ import { ChevronDownIcon } from '@heroicons/vue/20/solid'
 import SidebarNavigation from '@/components/SidebarNavigation.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import { useSidebarCollapsed } from '@/composables/useSidebarCollapsed'
+import { useAuth } from '@/composables/useAuth'
 
 const route = useRoute()
+const router = useRouter()
 const sidebarOpen = ref(false)
 const { collapsed: sidebarCollapsed, toggle: toggleSidebar } = useSidebarCollapsed()
+const { displayName, logout } = useAuth()
 
 watch(
   () => route.path,
@@ -28,9 +31,13 @@ watch(
   },
 )
 
+function onLogout() {
+  logout()
+  router.push({ name: 'login' })
+}
+
 const userNavigation = [
-  { name: 'Tu perfil', href: '#' },
-  { name: 'Cerrar sesión', href: '#' },
+  { name: 'Cerrar sesión', action: onLogout },
 ]
 
 const isFlushContent = computed(() => Boolean(route.meta.flushContent))
@@ -198,10 +205,10 @@ const isFlushContent = computed(() => Boolean(route.meta.flushContent))
                   src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"
                   alt=""
                 />
-                <span class="hidden lg:flex lg:items-center">
-                  <span class="ml-4 text-sm/6 font-semibold text-gray-900 dark:text-white" aria-hidden="true"
-                    >Usuario</span
-                  >
+                  <span class="hidden lg:flex lg:items-center">
+                  <span class="ml-4 text-sm/6 font-semibold text-gray-900 dark:text-white" aria-hidden="true">{{
+                    displayName
+                  }}</span>
                   <ChevronDownIcon class="ml-2 size-5 text-gray-400 dark:text-gray-500" aria-hidden="true" />
                 </span>
               </MenuButton>
@@ -217,14 +224,16 @@ const isFlushContent = computed(() => Boolean(route.meta.flushContent))
                   class="absolute right-0 z-10 mt-2.5 w-40 origin-top-right rounded-md bg-white py-2 shadow-lg outline-1 outline-gray-900/5 dark:bg-gray-800 dark:shadow-none dark:-outline-offset-1 dark:outline-white/10"
                 >
                   <MenuItem v-for="item in userNavigation" :key="item.name" v-slot="{ active }">
-                    <a
-                      :href="item.href"
+                    <button
+                      type="button"
                       :class="[
                         active ? 'bg-gray-50 outline-hidden dark:bg-white/5' : '',
-                        'block px-3 py-1 text-sm/6 text-gray-900 dark:text-white',
+                        'block w-full px-3 py-1 text-left text-sm/6 text-gray-900 dark:text-white',
                       ]"
-                      >{{ item.name }}</a
+                      @click="item.action()"
                     >
+                      {{ item.name }}
+                    </button>
                   </MenuItem>
                 </MenuItems>
               </transition>

@@ -1,4 +1,4 @@
-import type { CalEvent } from '@/data/calendarioEscolarDemo'
+import type { CalEvent } from '@/data/calendarioEscolarTypes'
 import type { CalTask } from '@/data/calendarioEscolarTypes'
 
 export const ALL_DAY_EVENT_LABEL = 'Todo el día'

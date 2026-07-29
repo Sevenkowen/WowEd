@@ -18,11 +18,13 @@ import {
   ChevronUpDownIcon,
   TagIcon,
   TrashIcon,
+  UserGroupIcon,
   XMarkIcon,
 } from '@heroicons/vue/20/solid'
+import CalendarioAssigneePicker from '@/components/calendario/CalendarioAssigneePicker.vue'
 import KtInputModeDatePicker from '@/components/KtInputModeDatePicker.vue'
 import KtInputModeTimePicker from '@/components/KtInputModeTimePicker.vue'
-import type { CalTask } from '@/data/calendarioEscolarTypes'
+import type { CalAssignee, CalTask } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
 import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
 import { useCalendarioCatalogs } from '@/composables/useCalendarioCatalogs'
@@ -62,6 +64,7 @@ defineOptions({ name: 'CalendarioTareaDetalleDialog' })
 
 const open = defineModel<boolean>('open', { default: false })
 const taskId = defineModel<string | null>('taskId', { default: null })
+const presetEventId = defineModel<string | null>('presetEventId', { default: null })
 
 const emit = defineEmits<{
   saved: []
@@ -70,8 +73,8 @@ const emit = defineEmits<{
 
 const STANDALONE_EVENT_ID = '__standalone__'
 
-const { todasLasTareas, updateTask, deleteTask, setCompletada } = useCalendarioEscolarTasks()
-const { eventosDelDia } = useCalendarioEscolarEvents()
+const { todasLasTareas, addTask, updateTask, deleteTask, setCompletada } = useCalendarioEscolarTasks()
+const { eventosDelDia, porFecha: eventosPorFecha } = useCalendarioEscolarEvents()
 
 const { taskTipoOptions, defaultTaskTipo } = useCalendarioCatalogs()
 
@@ -89,12 +92,24 @@ const completed = ref(false)
 const tipo = ref<CalendarioCatalogItem>(defaultTaskTipo.value)
 const cuadrante = ref<TaskCuadranteOption>(DEFAULT_TASK_CUADRANTE)
 const eventLinkId = ref(STANDALONE_EVENT_ID)
+const assigneeIds = ref<string[]>([])
+const assigneeSnapshot = ref<CalAssignee[]>([])
+const inactiveAssignees = computed(() => assigneeSnapshot.value.filter((a) => a.active === false))
 
 const task = computed(() =>
   taskId.value ? todasLasTareas.value.find((t) => t.id === taskId.value) ?? null : null,
 )
 
-const canEdit = computed(() => (task.value ? isCalendarModifyAllowed(task.value.date) : false))
+const isCreateMode = computed(
+  () => open.value && !taskId.value && !!presetEventId.value,
+)
+
+const isEventLinked = computed(() => eventLinkId.value !== STANDALONE_EVENT_ID)
+
+const canEdit = computed(() => {
+  if (isCreateMode.value) return isCalendarModifyAllowed(date.value)
+  return task.value ? isCalendarModifyAllowed(task.value.date) : false
+})
 
 const minDate = computed(() => todayYmd())
 
@@ -145,6 +160,14 @@ function tipoColor(tipoName: string): string {
   }
 }
 
+function findEventDate(eventId: string): string | null {
+  const needle = String(eventId)
+  for (const [ymd, events] of Object.entries(eventosPorFecha.value)) {
+    if (events.some((e) => String(e.id) === needle)) return ymd
+  }
+  return null
+}
+
 function loadFormFromTask(t: CalTask): void {
   title.value = t.title
   description.value = t.description ?? ''
@@ -156,18 +179,40 @@ function loadFormFromTask(t: CalTask): void {
   tipo.value = taskTipoOptions.value.find((o) => o.name === taskTipoOf(t)) ?? defaultTaskTipo.value
   cuadrante.value = taskCuadrantes.find((o) => o.name === taskCuadranteOf(t)) ?? DEFAULT_TASK_CUADRANTE
   eventLinkId.value = t.eventId ?? STANDALONE_EVENT_ID
+  assigneeSnapshot.value = t.assignees ?? []
+  assigneeIds.value = assigneeSnapshot.value.map((a) => a.id)
+  formError.value = ''
+  confirmDelete.value = false
+}
+
+function loadCreateFormForEvent(eventId: string): void {
+  title.value = ''
+  description.value = ''
+  date.value = findEventDate(eventId) ?? todayYmd()
+  allDay.value = false
+  time.value = '09:00'
+  endTime.value = '10:00'
+  completed.value = false
+  tipo.value = defaultTaskTipo.value
+  cuadrante.value = DEFAULT_TASK_CUADRANTE
+  eventLinkId.value = eventId
+  assigneeSnapshot.value = []
+  assigneeIds.value = []
   formError.value = ''
   confirmDelete.value = false
 }
 
 watch(
-  () => [open.value, taskId.value, task.value] as const,
-  ([isOpen, id, t]) => {
-    if (isOpen && id && t) loadFormFromTask(t)
+  () => [open.value, taskId.value, task.value, presetEventId.value] as const,
+  ([isOpen, id, t, preset]) => {
+    if (!isOpen) return
+    if (id && t) loadFormFromTask(t)
+    else if (!id && preset) loadCreateFormForEvent(preset)
   },
 )
 
 watch(date, () => {
+  if (presetEventId.value) return
   if (!eventLinkOptions.value.some((o) => o.id === eventLinkId.value)) {
     eventLinkId.value = STANDALONE_EVENT_ID
   }
@@ -199,6 +244,14 @@ function close(): void {
   formError.value = ''
 }
 
+watch(open, (isOpen) => {
+  if (!isOpen) {
+    window.setTimeout(() => {
+      if (!open.value) presetEventId.value = null
+    }, 200)
+  }
+})
+
 async function onToggleCompleted(): Promise<void> {
   if (!task.value) return
   const next = !completed.value
@@ -207,13 +260,21 @@ async function onToggleCompleted(): Promise<void> {
 }
 
 async function onSave(): Promise<void> {
-  if (!task.value || !canEdit.value) return
+  if (!canEdit.value) return
   const trimmed = title.value.trim()
   if (!trimmed) {
     formError.value = 'El título es obligatorio.'
     return
   }
-  if (!isCalendarSlotCreateAllowed(date.value, allDay.value ? null : time.value)) {
+  if (
+    !isEventLinked.value &&
+    !allDay.value &&
+    parseTimeToMinutes(endTime.value) <= parseTimeToMinutes(time.value)
+  ) {
+    formError.value = 'La hora de fin debe ser posterior a la hora de inicio.'
+    return
+  }
+  if (!isCalendarSlotCreateAllowed(date.value, isEventLinked.value || allDay.value ? null : time.value)) {
     formError.value = isDateBeforeToday(date.value)
       ? CALENDAR_PAST_DATE_MESSAGE
       : CALENDAR_PAST_SLOT_MESSAGE
@@ -222,26 +283,39 @@ async function onSave(): Promise<void> {
 
   saving.value = true
   formError.value = ''
-  const result = await updateTask(task.value.id, {
+  const eventId = eventLinkId.value === STANDALONE_EVENT_ID ? null : eventLinkId.value
+  const payload = {
     title: trimmed,
     description: description.value,
     date: date.value,
     tipo: tipo.value.name,
     cuadrante: cuadrante.value.name,
-    completed: completed.value,
-    allDay: allDay.value,
-    time: allDay.value ? null : time.value,
-    endTime: allDay.value ? null : endTime.value,
-    eventId: eventLinkId.value === STANDALONE_EVENT_ID ? null : eventLinkId.value,
-  })
-  saving.value = false
-
-  if (!result) {
-    formError.value = 'No se pudo guardar la tarea. Revisá la fecha y el horario.'
-    return
+    allDay: isEventLinked.value ? false : allDay.value,
+    time: isEventLinked.value || allDay.value ? null : time.value,
+    endTime: isEventLinked.value || allDay.value ? null : endTime.value,
+    eventId,
+    assigneeIds: assigneeIds.value,
   }
-  emit('saved')
-  close()
+
+  try {
+    const creating = isCreateMode.value
+    const result = creating
+      ? await Promise.resolve(addTask(payload))
+      : task.value
+        ? await updateTask(task.value.id, { ...payload, completed: completed.value })
+        : null
+
+    if (!result) {
+      formError.value = 'No se pudo guardar la tarea. Revisá la fecha y el horario.'
+      return
+    }
+    emit('saved')
+    close()
+  } catch {
+    formError.value = 'No se pudo guardar la tarea. Revisá la conexión con el servidor.'
+  } finally {
+    saving.value = false
+  }
 }
 
 async function onDelete(): Promise<void> {
@@ -262,7 +336,7 @@ async function onDelete(): Promise<void> {
 </script>
 
 <template>
-  <TransitionRoot as="template" :show="open && !!task">
+  <TransitionRoot as="template" :show="open">
     <Dialog class="relative z-50" @close="close">
       <TransitionChild
         as="template"
@@ -287,7 +361,6 @@ async function onDelete(): Promise<void> {
           leave-to="opacity-0 translate-y-2 sm:scale-95"
         >
           <DialogPanel
-            v-if="task"
             :class="['my-auto w-full max-w-2xl overflow-hidden rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10', gcalCard]"
           >
             <div :class="['h-1.5 w-full', cuadranteAccent]" aria-hidden="true" />
@@ -295,6 +368,7 @@ async function onDelete(): Promise<void> {
             <div class="border-b px-6 py-5 dark:border-white/10" :class="gcalBorder">
               <div class="flex items-start gap-4">
                 <button
+                  v-if="!isCreateMode"
                   type="button"
                   class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors"
                   :class="
@@ -321,6 +395,7 @@ async function onDelete(): Promise<void> {
                       {{ tipo.name }}
                     </span>
                     <span
+                      v-if="!isCreateMode"
                       :class="[
                         'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
                         completed
@@ -331,7 +406,7 @@ async function onDelete(): Promise<void> {
                       {{ completed ? 'Completada' : 'Pendiente' }}
                     </span>
                   </div>
-                  <DialogTitle class="sr-only">Editar tarea</DialogTitle>
+                  <DialogTitle class="sr-only">{{ isCreateMode ? 'Nueva tarea' : 'Editar tarea' }}</DialogTitle>
                   <input
                     v-model="title"
                     type="text"
@@ -369,9 +444,15 @@ async function onDelete(): Promise<void> {
                 <div class="grid gap-4 sm:grid-cols-2">
                   <div>
                     <label :class="fieldLabel">Fecha</label>
-                    <KtInputModeDatePicker v-model="date" :min-date="minDate" />
+                    <p
+                      v-if="presetEventId"
+                      class="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-900 dark:border-white/10 dark:bg-gray-800 dark:text-gray-100"
+                    >
+                      {{ dateLabel }}
+                    </p>
+                    <KtInputModeDatePicker v-else v-model="date" :min-date="minDate" />
                   </div>
-                  <div class="flex items-end">
+                  <div v-if="!isEventLinked" class="flex items-end">
                     <label class="flex cursor-pointer items-center gap-2.5 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 dark:border-white/10 dark:bg-gray-800 dark:text-gray-200">
                       <input
                         v-model="allDay"
@@ -382,7 +463,7 @@ async function onDelete(): Promise<void> {
                     </label>
                   </div>
                 </div>
-                <div v-if="!allDay" class="mt-4 grid gap-4 sm:grid-cols-2">
+                <div v-if="!isEventLinked && !allDay" class="mt-4 grid gap-4 sm:grid-cols-2">
                   <div>
                     <label :class="fieldLabel">Desde</label>
                     <KtInputModeTimePicker v-model="time" />
@@ -469,10 +550,29 @@ async function onDelete(): Promise<void> {
               </section>
 
               <section :class="sectionClass">
-                <Listbox v-model="eventLinkId" as="div">
+                <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
+                  <UserGroupIcon class="size-4 text-indigo-600 dark:text-indigo-400" />
+                  Personas asignadas
+                </h3>
+                <CalendarioAssigneePicker
+                  v-model="assigneeIds"
+                  :inactive-assignees="inactiveAssignees"
+                  :disabled="!canEdit"
+                />
+              </section>
+
+              <section :class="sectionClass">
+                <Listbox
+                  v-model="eventLinkId"
+                  as="div"
+                  :disabled="!!presetEventId"
+                >
                   <ListboxLabel :class="fieldLabel">Evento vinculado</ListboxLabel>
                   <div class="relative mt-0">
-                    <ListboxButton :class="selectBtnClass">
+                    <ListboxButton
+                      :class="[selectBtnClass, presetEventId ? 'cursor-default opacity-80' : '']"
+                      :disabled="!!presetEventId"
+                    >
                       <span class="col-start-1 row-start-1 truncate pr-6">
                         {{ eventLinkOptions.find((o) => o.id === eventLinkId)?.name ?? 'Sin evento' }}
                       </span>
@@ -481,6 +581,7 @@ async function onDelete(): Promise<void> {
                       />
                     </ListboxButton>
                     <ListboxOptions
+                      v-if="!presetEventId"
                       class="absolute z-30 mt-1 max-h-48 w-full overflow-auto rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-white/10 dark:bg-gray-800"
                     >
                       <ListboxOption
@@ -504,7 +605,7 @@ async function onDelete(): Promise<void> {
             >
               <div class="min-w-0">
                 <button
-                  v-if="canEdit"
+                  v-if="canEdit && !isCreateMode"
                   type="button"
                   class="inline-flex items-center gap-1.5 text-sm font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                   @click="onDelete"
@@ -533,7 +634,7 @@ async function onDelete(): Promise<void> {
                   :disabled="saving"
                   @click="onSave"
                 >
-                  {{ saving ? 'Guardando…' : 'Guardar' }}
+                  {{ saving ? 'Guardando…' : isCreateMode ? 'Crear tarea' : 'Guardar' }}
                 </button>
               </div>
             </div>

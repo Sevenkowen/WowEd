@@ -1,3 +1,5 @@
+import { calPastTimedBlockClass } from '@/utils/calendarioPastVisual'
+
 /** Contenedor <li> de evento/tarea en la grilla horaria (semana/día). */
 export function timedGridItemLiClass(): string {
   return 'pointer-events-auto relative z-10 mt-px min-w-0 overflow-hidden transition-[grid-row] duration-200 ease-out'
@@ -14,6 +16,11 @@ export const timedGridBlockLayoutClass = [
 /** Mientras el servidor confirma un cambio de duración. */
 export function timedGridSyncingClass(): string {
   return 'animate-cal-sync-pending ring-2 ring-white/70'
+}
+
+/** Ítem en día u horario ya transcurrido (solo lectura visual). */
+export function timedGridPastClass(): string {
+  return calPastTimedBlockClass
 }
 
 /** Durante el arrastre del asa de redimensionado. */

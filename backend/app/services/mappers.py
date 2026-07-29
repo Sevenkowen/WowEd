@@ -1,6 +1,7 @@
 from datetime import datetime, time
 
 from app.models.calendar import CalendarEvent, Task
+from app.schemas.calendar import AssigneeDto
 
 ALL_DAY_LABEL = "Todo el día"
 
@@ -14,7 +15,7 @@ def _fmt_range(start: time, end: time) -> str:
     return a if a == b else f"{a} – {b}"
 
 
-def event_to_dto(ev: CalendarEvent) -> dict:
+def event_to_dto(ev: CalendarEvent, assignees: list[AssigneeDto] | None = None) -> dict:
     start = ev.start_time
     end = ev.end_time
     all_day = False
@@ -37,6 +38,7 @@ def event_to_dto(ev: CalendarEvent) -> dict:
             "description": ev.description,
             "eventType": ev.visibility_scope,
             "allDay": True,
+            "assignees": [a.model_dump() for a in (assignees or [])],
         }
 
     date_part = start.strftime("%Y-%m-%d")
@@ -61,10 +63,11 @@ def event_to_dto(ev: CalendarEvent) -> dict:
         "description": ev.description,
         "eventType": ev.visibility_scope,
         "allDay": all_day,
+        "assignees": [a.model_dump() for a in (assignees or [])],
     }
 
 
-def task_to_dto(task: Task) -> dict:
+def task_to_dto(task: Task, assignees: list[AssigneeDto] | None = None) -> dict:
     due = task.due_date
     date_str = due.isoformat() if due else ""
     time_str = _fmt_time(task.start_time) if task.start_time else None
@@ -82,6 +85,7 @@ def task_to_dto(task: Task) -> dict:
         "endTime": end_str,
         "allDay": bool(task.all_day),
         "recurrence": task.recurrence_preset,
+        "assignees": [a.model_dump() for a in (assignees or [])],
     }
 
 

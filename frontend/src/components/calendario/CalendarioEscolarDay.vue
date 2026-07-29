@@ -4,9 +4,11 @@ import { useCalendarClock } from '@/composables/useCalendarClock'
 import { useCalendarioNowLine } from '@/composables/useCalendarioNowLine'
 import { useCalendarioPastSlots } from '@/composables/useCalendarioPastSlots'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/vue/20/solid'
-import type { CalEvent } from '@/data/calendarioEscolarDemo'
+import type { CalEvent } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
 import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
+import { useCalendarioSearchFocusHandler } from '@/composables/useCalendarioSearchFocusHandler'
+import { findCalendarioEvent, findCalendarioTask } from '@/composables/useCalendarioSearch'
 import { useCalendarioGridDrag, type CalendarioDragItem } from '@/composables/useCalendarioGridDrag'
 import { useCalendarioGridResize } from '@/composables/useCalendarioGridResize'
 import { taskDisplayTitle, taskDisplayTime, timedTaskBlockClass, timedTaskDragGhostClass, timedTaskDragPreviewClass, timedTaskResizeHandleClass, timedTaskTimeClass, timedTaskTitleClass } from '@/utils/calendarioTaskStyles'
@@ -59,7 +61,12 @@ import {
   calendarioHourCount,
   calendarioHourLabel,
 } from '@/utils/calendarioGridConstants'
-import { timedGridItemLiClass, timedGridResizingClass, timedGridSyncingClass } from '@/utils/calendarioTimedGridStyles'
+import { timedGridItemLiClass, timedGridResizingClass, timedGridSyncingClass, timedGridPastClass } from '@/utils/calendarioTimedGridStyles'
+import {
+  calPastClass,
+  isCalendarEventElapsed,
+  isCalendarTaskElapsed,
+} from '@/utils/calendarioPastVisual'
 
 defineOptions({ name: 'CalendarioEscolarDay' })
 
@@ -82,7 +89,7 @@ const gridRowsStyle = calendarioGridRowsStyle(hours.length)
 const dayStartMinutes = DAY_START_HOUR * 60
 
 const { porFecha: eventosPorFecha, moveEvent, resizeEvent } = useCalendarioEscolarEvents()
-const { tareasDelDia, moveTask, resizeTask } = useCalendarioEscolarTasks()
+const { tareasDelDia, moveTask, resizeTask, todasLasTareas } = useCalendarioEscolarTasks()
 
 const gridRef = ref<HTMLElement | null>(null)
 const scrollContainerRef = ref<HTMLElement | null>(null)
@@ -458,10 +465,20 @@ function timedGridBlockStateClass(
   isResizing: boolean,
   isSyncingResize: boolean,
   isSyncingDrag: boolean,
+  isPast = false,
 ): string {
   if (isResizing) return timedGridResizingClass()
   if (isSyncingResize || isSyncingDrag) return timedGridSyncingClass()
+  if (isPast) return timedGridPastClass()
   return ''
+}
+
+function dayEventElapsed(ev: CalEvent): boolean {
+  return isCalendarEventElapsed(ev, dayYmd.value, now.value)
+}
+
+function dayTaskElapsed(task: CalTask): boolean {
+  return isCalendarTaskElapsed(task, now.value)
 }
 
 function taskTimeLabel(task: CalTask): string {
@@ -580,6 +597,18 @@ function openTaskDetail(task: CalTask) {
   detalleOpen.value = true
 }
 
+useCalendarioSearchFocusHandler({
+  selectedDate,
+  contentMode,
+  navigateToDate: (date) => {
+    focusDay.value = parseYmd(date)
+  },
+  openEventDetail,
+  openTaskDetail,
+  findEvent: (id) => findCalendarioEvent(id, eventosPorFecha.value),
+  findTask: (id) => findCalendarioTask(id, todasLasTareas.value),
+})
+
 </script>
 
 <template>
@@ -613,7 +642,11 @@ function openTaskDetail(task: CalTask) {
             >
               <button
                 type="button"
-                :class="[monthEventBubbleClass(ev), 'max-w-full cursor-pointer']"
+                :class="[
+                  monthEventBubbleClass(ev),
+                  'max-w-full cursor-pointer',
+                  calPastClass(dayEventElapsed(ev), true),
+                ]"
                 :style="eventTypeBgStyleFromEvent(ev)"
                 @click="openEventDetail(ev)"
               >
@@ -626,7 +659,10 @@ function openTaskDetail(task: CalTask) {
                 <li v-for="task in tasksForEvent(ev.id)" :key="task.id">
                   <button
                     type="button"
-                    class="inline-flex max-w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] font-medium text-violet-800 hover:bg-violet-500/10 dark:text-violet-200 dark:hover:bg-violet-500/15"
+                    :class="[
+                      'inline-flex max-w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] font-medium text-violet-800 hover:bg-violet-500/10 dark:text-violet-200 dark:hover:bg-violet-500/15',
+                      calPastClass(dayTaskElapsed(task), true),
+                    ]"
                     @click.stop="openTaskDetail(task)"
                   >
                     <span class="size-1.5 shrink-0 rounded-full bg-violet-500" aria-hidden="true" />
@@ -649,7 +685,10 @@ function openTaskDetail(task: CalTask) {
               v-for="task in standaloneTasks"
               :key="task.id"
               type="button"
-              class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-dashed border-violet-400/70 bg-violet-50/80 px-2 py-1 text-left text-xs font-medium text-violet-900 transition-colors hover:bg-violet-100/90 dark:border-violet-500/50 dark:bg-violet-950/50 dark:text-violet-100 dark:hover:bg-violet-950/80"
+              :class="[
+                'inline-flex max-w-full items-center gap-1.5 rounded-md border border-dashed border-violet-400/70 bg-violet-50/80 px-2 py-1 text-left text-xs font-medium text-violet-900 transition-colors hover:bg-violet-100/90 dark:border-violet-500/50 dark:bg-violet-950/50 dark:text-violet-100 dark:hover:bg-violet-950/80',
+                calPastClass(dayTaskElapsed(task), true),
+              ]"
               @click="openTaskDetail(task)"
             >
               <span class="size-1.5 shrink-0 rounded-full bg-violet-500" aria-hidden="true" />
@@ -774,6 +813,7 @@ function openTaskDetail(task: CalTask) {
                         isResizingTask(task.id),
                         isSyncingTask(task.id),
                         isSyncingDragItem(dragItemPayload('task', task.id, taskSpan(task), task.gridRow)),
+                        dayTaskElapsed(task),
                       ),
                     ]"
                     @pointerdown="onItemPointerDown(dragItemPayload('task', task.id, taskSpan(task), task.gridRow), $event)"
@@ -811,6 +851,7 @@ function openTaskDetail(task: CalTask) {
                         isResizingEvent(ev.id),
                         isSyncingEvent(ev.id),
                         isSyncingDragItem(dragItemPayload('event', ev.id, eventSpan(ev), ev.gridRow)),
+                        dayEventElapsed(ev),
                       ),
                     ]"
                     :style="eventTypeBgStyleFromEvent(ev)"

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useCalendarioSearchFocus } from '@/composables/useCalendarioSearchFocus'
 import {
   Dialog,
   DialogPanel,
@@ -79,6 +80,24 @@ watch(calendarioDisplayView, () => {
     calendarioContentMode.value = 'calendario'
   }
 })
+
+const { searchFocusRequest } = useCalendarioSearchFocus()
+
+watch(
+  searchFocusRequest,
+  (req) => {
+    if (!req) return
+    selectedDay.value = req.date
+    schoolYear.value = Number(req.date.slice(0, 4))
+    if (calendarioContentMode.value === 'tareas') {
+      calendarioContentMode.value = 'calendario'
+    }
+    if (calendarioDisplayView.value === 'anio') {
+      calendarioDisplayView.value = 'mes'
+    }
+  },
+  { flush: 'sync' },
+)
 
 const { addEvent: addCalendarioEvent, addEventWithRecurrence, eventosDelDia, porFecha: eventosPorFecha, reload: reloadEventos } = useCalendarioEscolarEvents()
 const { addTask: addCalendarioTask, addTaskWithRecurrence, reload: reloadTareas } = useCalendarioEscolarTasks()

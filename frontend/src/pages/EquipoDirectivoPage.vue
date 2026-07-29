@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   BellAlertIcon,
   CalendarDaysIcon,
@@ -8,13 +8,25 @@ import {
   EnvelopeIcon,
   PlayIcon,
   PencilSquareIcon,
-  PhoneIcon,
   PlusIcon,
   TrashIcon,
   UserPlusIcon,
   UsersIcon,
 } from '@heroicons/vue/24/outline'
 import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon, ClipboardDocumentListIcon } from '@heroicons/vue/20/solid'
+import {
+  Dialog,
+  DialogPanel,
+  DialogTitle,
+  TransitionChild,
+  TransitionRoot,
+} from '@headlessui/vue'
+import EquipoDirectivoMiembroEditDialog from '@/components/equipo-directivo/EquipoDirectivoMiembroEditDialog.vue'
+import EquipoDirectivoMiembroCreateDialog from '@/components/equipo-directivo/EquipoDirectivoMiembroCreateDialog.vue'
+import { leadershipInitials, useLeadershipTeam } from '@/composables/useLeadershipTeam'
+import { useAuth } from '@/composables/useAuth'
+import { deleteLeadershipMember, type LeadershipMember } from '@/api/institutionApi'
+import { useApi } from '@/api/http'
 
 defineOptions({ name: 'EquipoDirectivoPage' })
 
@@ -141,92 +153,72 @@ function deleteTask(id: string) {
   sharedTasks.value = sharedTasks.value.filter((t) => t.id !== id)
 }
 
-type RoleTag = 'Administrador' | 'Aprobar' | 'Finanzas' | 'Visualizar'
-type Member = {
-  id: string
-  name: string
-  role: string
-  initials: string
-  email?: string
-  phone?: string
-  tags: RoleTag[]
+const { members, loaded, error, loadLeadershipTeam } = useLeadershipTeam()
+const { syncProfileFromLeadershipMember } = useAuth()
+
+const editOpen = ref(false)
+const createOpen = ref(false)
+const editingMember = ref<LeadershipMember | null>(null)
+const deleteOpen = ref(false)
+const deletingMember = ref<LeadershipMember | null>(null)
+const deleteError = ref('')
+const deleting = ref(false)
+
+onMounted(() => {
+  void loadLeadershipTeam()
+})
+
+function openEdit(member: LeadershipMember) {
+  editingMember.value = member
+  editOpen.value = true
 }
 
-const members = ref<Member[]>([
-  {
-    id: 'm1',
-    name: 'María Rodríguez',
-    role: 'Directora',
-    initials: 'MR',
-    email: 'maria.rodriguez@escuela.edu',
-    phone: '+34 612 345 678',
-    tags: ['Administrador', 'Aprobar'],
-  },
-  {
-    id: 'm2',
-    name: 'Carlos López',
-    role: 'Vicedirector Nivel Secundario',
-    initials: 'CL',
-    email: 'carlos.lopez@escuela.edu',
-    phone: '+34 623 456 789',
-    tags: ['Aprobar'],
-  },
-  {
-    id: 'm3',
-    name: 'Ana Martínez',
-    role: 'Vicedirectora Nivel Primario',
-    initials: 'AM',
-    email: 'ana.martinez@escuela.edu',
-    phone: '+34 634 567 890',
-    tags: ['Aprobar'],
-  },
-  {
-    id: 'm4',
-    name: 'Juan Pérez',
-    role: 'Coordinador Pedagógico',
-    initials: 'JP',
-    email: 'juan.perez@escuela.edu',
-    phone: '+34 645 678 901',
-    tags: ['Visualizar'],
-  },
-  {
-    id: 'm5',
-    name: 'Laura Gómez',
-    role: 'Secretaria Académica',
-    initials: 'LG',
-    email: 'laura.gomez@escuela.edu',
-    phone: '+34 656 789 012',
-    tags: ['Visualizar'],
-  },
-  {
-    id: 'm6',
-    name: 'Roberto Sánchez',
-    role: 'Administrador',
-    initials: 'RS',
-    email: 'roberto.sanchez@escuela.edu',
-    phone: '+34 667 890 123',
-    tags: ['Visualizar', 'Finanzas'],
-  },
-])
+async function onMemberSaved(updated: LeadershipMember) {
+  await loadLeadershipTeam()
+  syncProfileFromLeadershipMember(updated)
+}
+
+async function onMemberCreated() {
+  await loadLeadershipTeam()
+}
+
+function openCreate() {
+  createOpen.value = true
+}
+
+function openDelete(member: LeadershipMember) {
+  deletingMember.value = member
+  deleteError.value = ''
+  deleteOpen.value = true
+}
+
+function closeDelete() {
+  deleteOpen.value = false
+  deletingMember.value = null
+  deleteError.value = ''
+}
+
+async function confirmDelete() {
+  const member = deletingMember.value
+  if (!member) return
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await deleteLeadershipMember(member.membershipId)
+    closeDelete()
+    await loadLeadershipTeam()
+  } catch (e) {
+    deleteError.value = e instanceof Error ? e.message : 'No se pudo eliminar'
+  } finally {
+    deleting.value = false
+  }
+}
 
 const stats = computed(() => ({
   miembros: members.value.length,
   tareasActivas: 8,
   reunionesPendientes: 3,
 }))
-
-function tagClass(tag: RoleTag): string {
-  switch (tag) {
-    case 'Administrador':
-      return 'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300'
-    case 'Aprobar':
-      return 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300'
-    case 'Finanzas':
-      return 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200'
-    default:
-      return 'bg-gray-100 text-gray-700 dark:bg-white/10 dark:text-gray-300'
-  }
-}
 
 function noop() {}
 
@@ -416,8 +408,8 @@ const sortedPaiObjectives = computed(() => {
 </script>
 
 <template>
-  <div class="w-full text-left">
-    <header class="flex flex-col gap-4">
+  <div class="flex h-full min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-8 lg:px-10 py-6 sm:py-8">
+    <header class="shrink-0 flex flex-col gap-4">
       <div>
         <h1 class="text-3xl font-semibold tracking-tight text-gray-900 dark:text-white">Equipo Directivo</h1>
         <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -448,7 +440,7 @@ const sortedPaiObjectives = computed(() => {
     </header>
 
     <nav
-      class="mt-6 flex w-full flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-2 shadow-xs dark:border-white/10 dark:bg-gray-900/40 dark:shadow-none"
+      class="mt-6 shrink-0 flex w-full flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white p-2 shadow-xs dark:border-white/10 dark:bg-gray-900/40 dark:shadow-none"
       aria-label="Secciones de equipo directivo"
     >
       <button
@@ -469,23 +461,34 @@ const sortedPaiObjectives = computed(() => {
     </nav>
 
     <!-- Miembros -->
-    <section v-if="activeTab === 'miembros'" class="mt-8">
-      <div class="flex flex-wrap items-center justify-between gap-3">
+    <section v-if="activeTab === 'miembros'" class="mt-6 flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div class="shrink-0 flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">Miembros del Equipo</h2>
         <button
           type="button"
           class="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-purple-500 focus:outline-hidden focus:ring-4 focus:ring-purple-200 dark:focus:ring-purple-500/25"
-          @click="noop"
+          @click="openCreate"
         >
           <UserPlusIcon class="size-5" aria-hidden="true" />
           Añadir Miembro
         </button>
       </div>
 
-      <div class="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+      <div class="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+        <div class="grid grid-cols-1 gap-5 pb-2 sm:grid-cols-2 xl:grid-cols-3">
+        <p v-if="!useApi()" class="col-span-full text-sm text-gray-500 dark:text-gray-400">
+          Activá la API para ver los miembros del equipo directivo de la institución.
+        </p>
+        <p v-else-if="!loaded" class="col-span-full text-sm text-gray-500 dark:text-gray-400">
+          Cargando miembros…
+        </p>
+        <p v-else-if="error" class="col-span-full text-sm text-red-600 dark:text-red-400">{{ error }}</p>
+        <p v-else-if="!members.length" class="col-span-full text-sm text-gray-500 dark:text-gray-400">
+          No hay miembros del equipo directivo en esta institución.
+        </p>
         <article
           v-for="m in members"
-          :key="m.id"
+          :key="m.membershipId"
           class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xs dark:border-white/10 dark:bg-gray-900/40 dark:shadow-none"
         >
           <div class="p-5">
@@ -493,42 +496,28 @@ const sortedPaiObjectives = computed(() => {
               <div
                 class="grid size-12 shrink-0 place-items-center rounded-full bg-purple-100 text-sm font-semibold text-purple-700 dark:bg-purple-500/15 dark:text-purple-300"
               >
-                {{ m.initials }}
+                {{ leadershipInitials(m.displayName) }}
               </div>
               <div class="min-w-0 flex-1">
-                <p class="truncate text-base font-semibold text-gray-900 dark:text-white">{{ m.name }}</p>
-                <p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{{ m.role }}</p>
+                <p class="truncate text-base font-semibold text-gray-900 dark:text-white">{{ m.displayName }}</p>
+                <p class="mt-0.5 text-sm text-gray-500 dark:text-gray-400">{{ m.positionLabel }}</p>
+                <p v-if="m.schoolName" class="mt-1 text-xs text-gray-400 dark:text-gray-500">{{ m.schoolName }}</p>
               </div>
             </div>
 
             <dl class="mt-4 space-y-2 text-sm">
-              <div v-if="m.email" class="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+              <div class="flex items-center gap-2 text-gray-700 dark:text-gray-300">
                 <EnvelopeIcon class="size-4 shrink-0 text-gray-400" aria-hidden="true" />
                 <span class="truncate">{{ m.email }}</span>
               </div>
-              <div v-if="m.phone" class="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                <PhoneIcon class="size-4 shrink-0 text-gray-400" aria-hidden="true" />
-                <span>{{ m.phone }}</span>
-              </div>
             </dl>
-
-            <div class="mt-4 flex flex-wrap gap-2">
-              <span
-                v-for="tag in m.tags"
-                :key="tag"
-                class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
-                :class="tagClass(tag)"
-              >
-                {{ tag }}
-              </span>
-            </div>
           </div>
 
           <div class="grid grid-cols-2 gap-2 border-t border-gray-200 bg-gray-50 px-5 py-3 dark:border-white/10 dark:bg-white/5">
             <button
               type="button"
               class="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 dark:border-white/10 dark:bg-gray-900/40 dark:text-gray-100 dark:hover:bg-white/5"
-              @click="noop"
+              @click="openEdit(m)"
             >
               <PencilSquareIcon class="size-4" aria-hidden="true" />
               Editar
@@ -536,20 +525,21 @@ const sortedPaiObjectives = computed(() => {
             <button
               type="button"
               class="inline-flex items-center justify-center gap-2 rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 dark:border-rose-500/30 dark:bg-gray-900/40 dark:text-rose-200 dark:hover:bg-rose-500/10"
-              @click="noop"
+              @click="openDelete(m)"
             >
               <TrashIcon class="size-4" aria-hidden="true" />
               Eliminar
             </button>
           </div>
         </article>
+        </div>
       </div>
     </section>
 
     <!-- Placeholders para tabs restantes -->
     <section
       v-else-if="activeTab === 'tareas'"
-      class="mt-8"
+      class="mt-6 min-h-0 flex-1 overflow-y-auto"
     >
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="min-w-0">
@@ -670,7 +660,7 @@ const sortedPaiObjectives = computed(() => {
 
     <section
       v-else-if="activeTab === 'calendario'"
-      class="mt-8"
+      class="mt-6 min-h-0 flex-1 overflow-y-auto"
     >
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="min-w-0">
@@ -805,7 +795,7 @@ const sortedPaiObjectives = computed(() => {
       </div>
     </section>
 
-    <section v-else class="mt-8">
+    <section v-else class="mt-6 min-h-0 flex-1 overflow-y-auto">
       <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="min-w-0">
           <h2 class="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white">PAI Colaborativo</h2>
@@ -904,6 +894,75 @@ const sortedPaiObjectives = computed(() => {
         </article>
       </div>
     </section>
+
+    <EquipoDirectivoMiembroEditDialog
+      v-model:open="editOpen"
+      v-model:member="editingMember"
+      @saved="onMemberSaved"
+    />
+
+    <EquipoDirectivoMiembroCreateDialog v-model:open="createOpen" @created="onMemberCreated" />
+
+    <TransitionRoot as="template" :show="deleteOpen">
+      <Dialog class="relative z-50" @close="closeDelete">
+        <TransitionChild
+          as="template"
+          enter="ease-out duration-200"
+          enter-from="opacity-0"
+          enter-to="opacity-100"
+          leave="ease-in duration-150"
+          leave-from="opacity-100"
+          leave-to="opacity-0"
+        >
+          <div class="fixed inset-0 bg-gray-900/50 dark:bg-black/60" />
+        </TransitionChild>
+
+        <div class="fixed inset-0 overflow-y-auto p-4 sm:p-6">
+          <div class="flex min-h-full items-center justify-center">
+            <TransitionChild
+              as="template"
+              enter="ease-out duration-200"
+              enter-from="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              enter-to="opacity-100 translate-y-0 sm:scale-100"
+              leave="ease-in duration-150"
+              leave-from="opacity-100 translate-y-0 sm:scale-100"
+              leave-to="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+            >
+              <DialogPanel
+                class="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-gray-800"
+              >
+                <DialogTitle class="text-lg font-semibold text-gray-900 dark:text-white">
+                  Eliminar miembro
+                </DialogTitle>
+                <p class="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                  ¿Querés quitar a
+                  <span class="font-semibold text-gray-900 dark:text-white">{{ deletingMember?.displayName }}</span>
+                  del equipo directivo? El usuario seguirá existiendo pero dejará de aparecer en este módulo.
+                </p>
+                <p v-if="deleteError" class="mt-3 text-sm text-red-600 dark:text-red-400">{{ deleteError }}</p>
+                <div class="mt-6 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    class="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5"
+                    @click="closeDelete"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    :disabled="deleting"
+                    class="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-rose-500 disabled:opacity-60"
+                    @click="confirmDelete"
+                  >
+                    {{ deleting ? 'Eliminando…' : 'Eliminar' }}
+                  </button>
+                </div>
+              </DialogPanel>
+            </TransitionChild>
+          </div>
+        </div>
+      </Dialog>
+    </TransitionRoot>
   </div>
 </template>
 

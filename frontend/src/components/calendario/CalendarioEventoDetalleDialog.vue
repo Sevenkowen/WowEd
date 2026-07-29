@@ -17,11 +17,14 @@ import {
   ChevronUpDownIcon,
   TagIcon,
   TrashIcon,
+  UserGroupIcon,
   XMarkIcon,
 } from '@heroicons/vue/20/solid'
+import CalendarioAssigneePicker from '@/components/calendario/CalendarioAssigneePicker.vue'
 import KtInputModeDatePicker from '@/components/KtInputModeDatePicker.vue'
 import KtInputModeTimePicker from '@/components/KtInputModeTimePicker.vue'
-import type { CalEvent } from '@/data/calendarioEscolarDemo'
+import type { CalEvent } from '@/data/calendarioEscolarTypes'
+import type { CalAssignee } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
 import { useCalendarioCatalogs } from '@/composables/useCalendarioCatalogs'
 import type { CalendarioCatalogItem } from '@/data/calendarioCatalogDefaults'
@@ -80,6 +83,9 @@ const startTime = ref('09:00')
 const endTime = ref('10:00')
 const allDay = ref(false)
 const eventType = ref<CalendarioCatalogItem>(defaultEventType.value)
+const assigneeIds = ref<string[]>([])
+const assigneeSnapshot = ref<CalAssignee[]>([])
+const inactiveAssignees = computed(() => assigneeSnapshot.value.filter((a) => a.active === false))
 
 const event = computed((): CalEvent | null => {
   if (!eventId.value) return null
@@ -133,6 +139,8 @@ function loadFormFromEvent(ev: CalEvent): void {
   }
   eventType.value =
     eventTypeOptions.value.find((o) => o.name === ev.eventType) ?? defaultEventType.value
+  assigneeSnapshot.value = ev.assignees ?? []
+  assigneeIds.value = assigneeSnapshot.value.map((a) => a.id)
   formError.value = ''
   confirmDelete.value = false
 }
@@ -202,6 +210,7 @@ async function onSave(): Promise<void> {
       startTime: allDay.value ? undefined : startTime.value,
       endTime: allDay.value ? undefined : endTime.value,
       eventType: eventType.value.name,
+      assigneeIds: assigneeIds.value,
     }),
   )
   saving.value = false
@@ -383,6 +392,18 @@ async function onDelete(): Promise<void> {
                     />
                   </div>
                 </div>
+              </section>
+
+              <section :class="sectionClass">
+                <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white">
+                  <UserGroupIcon class="size-4 text-indigo-600 dark:text-indigo-400" />
+                  Personas asignadas
+                </h3>
+                <CalendarioAssigneePicker
+                  v-model="assigneeIds"
+                  :inactive-assignees="inactiveAssignees"
+                  :disabled="!canEdit"
+                />
               </section>
             </fieldset>
 

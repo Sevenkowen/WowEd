@@ -2,11 +2,14 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { Component } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
+import { useModuleAccess } from '@/composables/useModuleAccess'
 import {
   AcademicCapIcon,
   BookOpenIcon,
   BriefcaseIcon,
   BuildingOfficeIcon,
+  BuildingOffice2Icon,
   CalendarDaysIcon,
   CalendarIcon,
   ChartBarIcon,
@@ -25,6 +28,8 @@ import {
   LightBulbIcon,
   RectangleGroupIcon,
   ScaleIcon,
+  ShieldCheckIcon,
+  KeyIcon,
   SignalIcon,
   SparklesIcon,
   UserCircleIcon,
@@ -52,6 +57,53 @@ const props = defineProps<{
 }>()
 
 const route = useRoute()
+const { isSuperadmin, isAdministrador, user } = useAuth()
+const { filterLinksByModule } = useModuleAccess()
+
+const superadminLinks: NavLink[] = [
+  { name: 'Dashboard', to: '/superadmin/dashboard', icon: HomeIcon },
+]
+
+const superadminSecondaryLinks: NavLink[] = [
+  { name: 'Personal y Usuarios', to: '/superadmin/usuarios', icon: UserGroupIcon },
+  { name: 'Roles Institucionales', to: '/superadmin/roles', icon: ShieldCheckIcon },
+]
+
+const superadminEmpresaSection: NavSection = {
+  id: 'superadmin-empresa',
+  name: 'Empresa',
+  icon: BriefcaseIcon,
+  links: [
+    { name: 'Instituciones', to: '/superadmin/instituciones', icon: BuildingOffice2Icon },
+    { name: 'Administradores', to: '/superadmin/administradores', icon: KeyIcon },
+  ],
+}
+
+const superadminEstructuraSection: NavSection = {
+  id: 'superadmin-estructura',
+  name: 'Colegios y Materias',
+  icon: AcademicCapIcon,
+  links: [
+    { name: 'Colegios y Grados', to: '/superadmin/estructura/colegios', icon: BuildingOffice2Icon },
+    { name: 'Profesores', to: '/superadmin/estructura/profesores', icon: UserGroupIcon },
+  ],
+}
+
+const adminLinks: NavLink[] = [
+  { name: 'Dashboard', to: '/admin/dashboard', icon: HomeIcon },
+  { name: 'Personal y Usuarios', to: '/admin/usuarios', icon: UserGroupIcon },
+  { name: 'Roles Institucionales', to: '/admin/roles', icon: ShieldCheckIcon },
+]
+
+const adminEstructuraSection: NavSection = {
+  id: 'admin-estructura',
+  name: 'Colegios y Materias',
+  icon: AcademicCapIcon,
+  links: [
+    { name: 'Colegios y Grados', to: '/admin/estructura/colegios', icon: BuildingOffice2Icon },
+    { name: 'Profesores', to: '/admin/estructura/profesores', icon: UserGroupIcon },
+  ],
+}
 
 const primaryLinks: NavLink[] = [
   { name: 'Dashboard', to: '/', icon: HomeIcon },
@@ -119,8 +171,42 @@ const multigestionSection: NavSection = {
   ],
 }
 
+const filteredSuperadminLinks = computed(() => filterLinksByModule(superadminLinks))
+const filteredSuperadminSecondaryLinks = computed(() => filterLinksByModule(superadminSecondaryLinks))
+const filteredAdminLinks = computed(() => filterLinksByModule(adminLinks))
+const filteredSuperadminEmpresaSection = computed((): NavSection => ({
+  ...superadminEmpresaSection,
+  links: filterLinksByModule(superadminEmpresaSection.links),
+}))
+const filteredSuperadminEstructuraSection = computed((): NavSection => ({
+  ...superadminEstructuraSection,
+  links: filterLinksByModule(superadminEstructuraSection.links),
+}))
+const filteredAdminEstructuraSection = computed((): NavSection => ({
+  ...adminEstructuraSection,
+  links: filterLinksByModule(adminEstructuraSection.links),
+}))
+const filteredPrimaryLinks = computed(() => filterLinksByModule(primaryLinks))
+const filteredSecondaryLinks = computed(() => filterLinksByModule(secondaryLinks))
+
+const filteredDimensionesSection = computed((): NavSection => ({
+  ...dimensionesSection,
+  links: filterLinksByModule(dimensionesSection.links),
+}))
+
+const filteredMultigestionSection = computed((): NavSection => ({
+  ...multigestionSection,
+  links: filterLinksByModule(multigestionSection.links),
+}))
+
+const showDimensionesSection = computed(() => filteredDimensionesSection.value.links.length > 0)
+const showMultigestionSection = computed(() => filteredMultigestionSection.value.links.length > 0)
+
 const dimensionesOpen = ref(false)
 const multigestionOpen = ref(false)
+const superadminEmpresaOpen = ref(false)
+const superadminEstructuraOpen = ref(false)
+const adminEstructuraOpen = ref(false)
 const activeFlyout = ref<string | null>(null)
 const dimensionesBtnRef = ref<HTMLButtonElement | null>(null)
 const multigestionBtnRef = ref<HTMLButtonElement | null>(null)
@@ -130,16 +216,33 @@ const SIDEBAR_MINI_WIDTH = '4.5rem'
 
 const dimensionesActive = computed(() => route.path.startsWith('/dimensiones'))
 const multigestionActive = computed(() => route.path.startsWith('/multigestion'))
+const superadminEmpresaActive = computed(
+  () =>
+    route.path.startsWith('/superadmin/instituciones') ||
+    route.path.startsWith('/superadmin/administradores'),
+)
+const superadminEstructuraActive = computed(() => route.path.startsWith('/superadmin/estructura'))
+const adminEstructuraActive = computed(() => route.path.startsWith('/admin/estructura'))
+
+const showSuperadminEmpresaSection = computed(() => filteredSuperadminEmpresaSection.value.links.length > 0)
+const showSuperadminEstructuraSection = computed(() => filteredSuperadminEstructuraSection.value.links.length > 0)
+const showAdminEstructuraSection = computed(() => filteredAdminEstructuraSection.value.links.length > 0)
 
 const activeFlyoutSection = computed((): NavSection | null => {
-  if (activeFlyout.value === 'dimensiones') return dimensionesSection
-  if (activeFlyout.value === 'multigestion') return multigestionSection
+  if (activeFlyout.value === 'dimensiones') return filteredDimensionesSection.value
+  if (activeFlyout.value === 'multigestion') return filteredMultigestionSection.value
+  if (activeFlyout.value === 'superadmin-empresa') return filteredSuperadminEmpresaSection.value
+  if (activeFlyout.value === 'superadmin-estructura') return filteredSuperadminEstructuraSection.value
+  if (activeFlyout.value === 'admin-estructura') return filteredAdminEstructuraSection.value
   return null
 })
 
 function toggleSection(sectionId: string): void {
   if (sectionId === 'dimensiones') dimensionesOpen.value = !dimensionesOpen.value
   if (sectionId === 'multigestion') multigestionOpen.value = !multigestionOpen.value
+  if (sectionId === 'superadmin-empresa') superadminEmpresaOpen.value = !superadminEmpresaOpen.value
+  if (sectionId === 'superadmin-estructura') superadminEstructuraOpen.value = !superadminEstructuraOpen.value
+  if (sectionId === 'admin-estructura') adminEstructuraOpen.value = !adminEstructuraOpen.value
 }
 
 function updateFlyoutArrow(sectionId: string): void {
@@ -165,6 +268,20 @@ function closeFlyout(): void {
 function linkActive(to: string): boolean {
   if (to === '/') return route.path === '/'
   return route.path === to || route.path.startsWith(`${to}/`)
+}
+
+function adminLinkActive(to: string): boolean {
+  if (to === '/admin/dashboard') {
+    return route.path === '/admin/dashboard'
+  }
+  return linkActive(to)
+}
+
+function superadminLinkActive(to: string): boolean {
+  if (to === '/superadmin/dashboard') {
+    return route.path === '/superadmin/dashboard'
+  }
+  return linkActive(to)
 }
 
 function linkClass(active: boolean): string[] {
@@ -243,6 +360,9 @@ watch(
     if (mini) {
       dimensionesOpen.value = false
       multigestionOpen.value = false
+      superadminEmpresaOpen.value = false
+      superadminEstructuraOpen.value = false
+      adminEstructuraOpen.value = false
     } else {
       closeFlyout()
     }
@@ -265,6 +385,30 @@ watch(
   { immediate: true },
 )
 
+watch(
+  superadminEmpresaActive,
+  (active) => {
+    if (active && !props.collapsed) superadminEmpresaOpen.value = true
+  },
+  { immediate: true },
+)
+
+watch(
+  superadminEstructuraActive,
+  (active) => {
+    if (active && !props.collapsed) superadminEstructuraOpen.value = true
+  },
+  { immediate: true },
+)
+
+watch(
+  adminEstructuraActive,
+  (active) => {
+    if (active && !props.collapsed) adminEstructuraOpen.value = true
+  },
+  { immediate: true },
+)
+
 function onDocumentKeydown(event: KeyboardEvent): void {
   if (event.key === 'Escape') closeFlyout()
 }
@@ -283,7 +427,201 @@ onUnmounted(() => {
     <ul role="list" class="flex flex-1 flex-col gap-y-1" :class="collapsed ? 'items-center' : ''">
       <li class="w-full">
         <ul role="list" class="space-y-1" :class="collapsed ? '' : '-mx-2'">
-          <li v-for="item in primaryLinks" :key="item.to">
+          <template v-if="isSuperadmin">
+            <li v-for="item in filteredSuperadminLinks" :key="item.to">
+              <RouterLink
+                :to="item.to"
+                :class="linkClass(superadminLinkActive(item.to))"
+                :title="collapsed ? item.name : undefined"
+              >
+                <component :is="item.icon" :class="iconClass(superadminLinkActive(item.to))" aria-hidden="true" />
+                <span v-if="!collapsed" class="truncate">{{ item.name }}</span>
+              </RouterLink>
+            </li>
+            <li v-if="showSuperadminEmpresaSection">
+              <template v-if="!collapsed">
+                <button
+                  type="button"
+                  :class="sectionButtonClass(superadminEmpresaActive)"
+                  :aria-expanded="superadminEmpresaOpen"
+                  @click="toggleSection('superadmin-empresa')"
+                >
+                  <span class="flex min-w-0 items-center gap-x-3">
+                    <BriefcaseIcon
+                      class="size-6 shrink-0"
+                      :class="
+                        superadminEmpresaActive
+                          ? 'text-indigo-600 dark:text-white'
+                          : 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white'
+                      "
+                    />
+                    <span class="truncate">{{ filteredSuperadminEmpresaSection.name }}</span>
+                  </span>
+                  <ChevronRightIcon v-if="!superadminEmpresaOpen" class="size-5 shrink-0 text-gray-400" aria-hidden="true" />
+                  <ChevronDownIcon v-else class="size-5 shrink-0 text-gray-400" aria-hidden="true" />
+                </button>
+                <ul
+                  v-show="superadminEmpresaOpen"
+                  role="list"
+                  class="ml-2 mt-1 space-y-1 border-l border-gray-200 pl-3 dark:border-white/10"
+                >
+                  <li v-for="sub in filteredSuperadminEmpresaSection.links" :key="sub.to">
+                    <RouterLink :to="sub.to" :class="[...linkClass(superadminLinkActive(sub.to)), 'items-start']">
+                      <component :is="sub.icon" :class="[...iconClass(superadminLinkActive(sub.to)), 'mt-0.5']" aria-hidden="true" />
+                      <span class="min-w-0 flex-1 leading-snug">{{ sub.name }}</span>
+                    </RouterLink>
+                  </li>
+                </ul>
+              </template>
+              <button
+                v-else
+                type="button"
+                :class="sectionButtonClass(superadminEmpresaActive || activeFlyout === 'superadmin-empresa')"
+                :aria-expanded="activeFlyout === 'superadmin-empresa'"
+                :title="filteredSuperadminEmpresaSection.name"
+                @click="toggleFlyout('superadmin-empresa')"
+              >
+                <BriefcaseIcon
+                  class="size-6 shrink-0"
+                  :class="
+                    superadminEmpresaActive || activeFlyout === 'superadmin-empresa'
+                      ? 'text-indigo-600 dark:text-white'
+                      : 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white'
+                  "
+                />
+              </button>
+            </li>
+            <li v-for="item in filteredSuperadminSecondaryLinks" :key="item.to">
+              <RouterLink
+                :to="item.to"
+                :class="linkClass(superadminLinkActive(item.to))"
+                :title="collapsed ? item.name : undefined"
+              >
+                <component :is="item.icon" :class="iconClass(superadminLinkActive(item.to))" aria-hidden="true" />
+                <span v-if="!collapsed" class="truncate">{{ item.name }}</span>
+              </RouterLink>
+            </li>
+            <li v-if="showSuperadminEstructuraSection">
+              <template v-if="!collapsed">
+                <button
+                  type="button"
+                  :class="sectionButtonClass(superadminEstructuraActive)"
+                  :aria-expanded="superadminEstructuraOpen"
+                  @click="toggleSection('superadmin-estructura')"
+                >
+                  <span class="flex min-w-0 items-center gap-x-3">
+                    <AcademicCapIcon
+                      class="size-6 shrink-0"
+                      :class="
+                        superadminEstructuraActive
+                          ? 'text-indigo-600 dark:text-white'
+                          : 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white'
+                      "
+                    />
+                    <span class="truncate">{{ filteredSuperadminEstructuraSection.name }}</span>
+                  </span>
+                  <ChevronRightIcon v-if="!superadminEstructuraOpen" class="size-5 shrink-0 text-gray-400" aria-hidden="true" />
+                  <ChevronDownIcon v-else class="size-5 shrink-0 text-gray-400" aria-hidden="true" />
+                </button>
+                <ul
+                  v-show="superadminEstructuraOpen"
+                  role="list"
+                  class="ml-2 mt-1 space-y-1 border-l border-gray-200 pl-3 dark:border-white/10"
+                >
+                  <li v-for="sub in filteredSuperadminEstructuraSection.links" :key="sub.to">
+                    <RouterLink :to="sub.to" :class="[...linkClass(superadminLinkActive(sub.to)), 'items-start']">
+                      <component :is="sub.icon" :class="[...iconClass(superadminLinkActive(sub.to)), 'mt-0.5']" aria-hidden="true" />
+                      <span class="min-w-0 flex-1 leading-snug">{{ sub.name }}</span>
+                    </RouterLink>
+                  </li>
+                </ul>
+              </template>
+              <button
+                v-else
+                type="button"
+                :class="sectionButtonClass(superadminEstructuraActive || activeFlyout === 'superadmin-estructura')"
+                :aria-expanded="activeFlyout === 'superadmin-estructura'"
+                :title="filteredSuperadminEstructuraSection.name"
+                @click="toggleFlyout('superadmin-estructura')"
+              >
+                <AcademicCapIcon
+                  class="size-6 shrink-0"
+                  :class="
+                    superadminEstructuraActive || activeFlyout === 'superadmin-estructura'
+                      ? 'text-indigo-600 dark:text-white'
+                      : 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white'
+                  "
+                />
+              </button>
+            </li>
+          </template>
+          <template v-else-if="isAdministrador">
+            <li v-for="item in filteredAdminLinks" :key="item.to">
+              <RouterLink
+                :to="item.to"
+                :class="linkClass(adminLinkActive(item.to))"
+                :title="collapsed ? item.name : undefined"
+              >
+                <component :is="item.icon" :class="iconClass(adminLinkActive(item.to))" aria-hidden="true" />
+                <span v-if="!collapsed" class="truncate">{{ item.name }}</span>
+              </RouterLink>
+            </li>
+            <li v-if="showAdminEstructuraSection">
+              <template v-if="!collapsed">
+                <button
+                  type="button"
+                  :class="sectionButtonClass(adminEstructuraActive)"
+                  :aria-expanded="adminEstructuraOpen"
+                  @click="toggleSection('admin-estructura')"
+                >
+                  <span class="flex min-w-0 items-center gap-x-3">
+                    <AcademicCapIcon
+                      class="size-6 shrink-0"
+                      :class="
+                        adminEstructuraActive
+                          ? 'text-indigo-600 dark:text-white'
+                          : 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white'
+                      "
+                    />
+                    <span class="truncate">{{ filteredAdminEstructuraSection.name }}</span>
+                  </span>
+                  <ChevronRightIcon v-if="!adminEstructuraOpen" class="size-5 shrink-0 text-gray-400" aria-hidden="true" />
+                  <ChevronDownIcon v-else class="size-5 shrink-0 text-gray-400" aria-hidden="true" />
+                </button>
+                <ul
+                  v-show="adminEstructuraOpen"
+                  role="list"
+                  class="ml-2 mt-1 space-y-1 border-l border-gray-200 pl-3 dark:border-white/10"
+                >
+                  <li v-for="sub in filteredAdminEstructuraSection.links" :key="sub.to">
+                    <RouterLink :to="sub.to" :class="[...linkClass(adminLinkActive(sub.to)), 'items-start']">
+                      <component :is="sub.icon" :class="[...iconClass(adminLinkActive(sub.to)), 'mt-0.5']" aria-hidden="true" />
+                      <span class="min-w-0 flex-1 leading-snug">{{ sub.name }}</span>
+                    </RouterLink>
+                  </li>
+                </ul>
+              </template>
+              <button
+                v-else
+                type="button"
+                :class="sectionButtonClass(adminEstructuraActive || activeFlyout === 'admin-estructura')"
+                :aria-expanded="activeFlyout === 'admin-estructura'"
+                :title="filteredAdminEstructuraSection.name"
+                @click="toggleFlyout('admin-estructura')"
+              >
+                <AcademicCapIcon
+                  class="size-6 shrink-0"
+                  :class="
+                    adminEstructuraActive || activeFlyout === 'admin-estructura'
+                      ? 'text-indigo-600 dark:text-white'
+                      : 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white'
+                  "
+                />
+              </button>
+            </li>
+          </template>
+          <template v-else>
+          <li v-for="item in filteredPrimaryLinks" :key="item.to">
             <RouterLink
               :to="item.to"
               :class="linkClass(linkActive(item.to))"
@@ -294,7 +632,7 @@ onUnmounted(() => {
             </RouterLink>
           </li>
 
-          <li>
+          <li v-if="showDimensionesSection">
             <template v-if="!collapsed">
               <button
                 type="button"
@@ -311,7 +649,7 @@ onUnmounted(() => {
                         : 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white'
                     "
                   />
-                  <span class="truncate">{{ dimensionesSection.name }}</span>
+                  <span class="truncate">{{ filteredDimensionesSection.name }}</span>
                 </span>
                 <ChevronRightIcon
                   v-if="!dimensionesOpen"
@@ -325,7 +663,7 @@ onUnmounted(() => {
                 role="list"
                 class="ml-2 mt-1 space-y-1 border-l border-gray-200 pl-3 dark:border-white/10"
               >
-                <li v-for="sub in dimensionesSection.links" :key="sub.to">
+                <li v-for="sub in filteredDimensionesSection.links" :key="sub.to">
                   <RouterLink :to="sub.to" :class="[...linkClass(linkActive(sub.to)), 'items-start']">
                     <component :is="sub.icon" :class="[...iconClass(linkActive(sub.to)), 'mt-0.5']" aria-hidden="true" />
                     <span class="min-w-0 flex-1 leading-snug">{{ sub.name }}</span>
@@ -339,7 +677,7 @@ onUnmounted(() => {
               type="button"
               :class="sectionButtonClass(dimensionesActive || activeFlyout === 'dimensiones')"
               :aria-expanded="activeFlyout === 'dimensiones'"
-              :title="dimensionesSection.name"
+              :title="filteredDimensionesSection.name"
               @click="toggleFlyout('dimensiones')"
             >
               <BookOpenIcon
@@ -353,7 +691,7 @@ onUnmounted(() => {
             </button>
           </li>
 
-          <li v-for="item in secondaryLinks" :key="item.to">
+          <li v-for="item in filteredSecondaryLinks" :key="item.to">
             <RouterLink
               :to="item.to"
               :class="linkClass(linkActive(item.to))"
@@ -364,7 +702,7 @@ onUnmounted(() => {
             </RouterLink>
           </li>
 
-          <li>
+          <li v-if="showMultigestionSection">
             <template v-if="!collapsed">
               <button
                 type="button"
@@ -381,7 +719,7 @@ onUnmounted(() => {
                         : 'text-gray-400 group-hover:text-indigo-600 dark:group-hover:text-white'
                     "
                   />
-                  <span class="truncate">{{ multigestionSection.name }}</span>
+                  <span class="truncate">{{ filteredMultigestionSection.name }}</span>
                 </span>
                 <ChevronUpIcon v-if="multigestionOpen" class="size-5 shrink-0 text-gray-400" aria-hidden="true" />
                 <ChevronDownIcon v-else class="size-5 shrink-0 text-gray-400" aria-hidden="true" />
@@ -391,7 +729,7 @@ onUnmounted(() => {
                 role="list"
                 class="ml-2 mt-1 space-y-1 border-l border-gray-200 pl-3 dark:border-white/10"
               >
-                <li v-for="sub in multigestionSection.links" :key="sub.to">
+                <li v-for="sub in filteredMultigestionSection.links" :key="sub.to">
                   <RouterLink :to="sub.to" :class="[...linkClass(linkActive(sub.to)), 'items-start']">
                     <component :is="sub.icon" :class="[...iconClass(linkActive(sub.to)), 'mt-0.5']" aria-hidden="true" />
                     <span class="min-w-0 flex-1 leading-snug">{{ sub.name }}</span>
@@ -405,7 +743,7 @@ onUnmounted(() => {
               type="button"
               :class="sectionButtonClass(multigestionActive || activeFlyout === 'multigestion')"
               :aria-expanded="activeFlyout === 'multigestion'"
-              :title="multigestionSection.name"
+              :title="filteredMultigestionSection.name"
               @click="toggleFlyout('multigestion')"
             >
               <BriefcaseIcon
@@ -418,10 +756,23 @@ onUnmounted(() => {
               />
             </button>
           </li>
+          </template>
         </ul>
       </li>
 
       <li class="mt-auto w-full pt-6">
+        <p
+          v-if="isAdministrador && !collapsed"
+          class="mb-3 px-2 text-[11px] leading-snug text-muted"
+        >
+          Jurisdicción: {{ user?.institution_name ?? 'tu institución' }}
+        </p>
+        <p
+          v-if="isSuperadmin && !collapsed"
+          class="mb-3 px-2 text-[11px] leading-snug text-muted"
+        >
+          Jurisdicción lógica: acceso global absoluto
+        </p>
         <a
           href="#"
           :class="[

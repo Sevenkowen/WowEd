@@ -1,4 +1,4 @@
-import type { CalEvent } from '@/data/calendarioEscolarDemo'
+import type { CalEvent } from '@/data/calendarioEscolarTypes'
 import { resolveEventTypeColor } from '@/composables/useCalendarioCatalogs'
 import { timedGridBlockLayoutClass } from '@/utils/calendarioTimedGridStyles'
 

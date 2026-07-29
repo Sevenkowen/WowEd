@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import type { CalEvent } from '@/data/calendarioEscolarDemo'
+import type { CalEvent } from '@/data/calendarioEscolarTypes'
 import {
   apiCreateEvent,
   apiDeleteEvent,
@@ -18,6 +18,8 @@ import type { CalRecurrencePreset } from '@/utils/calendarioRecurrence'
 import { expandRecurrenceDates } from '@/utils/calendarioRecurrence'
 import { moveCalEvent, resizeCalEvent } from '@/utils/calendarioEventTime'
 import type { NuevoCalendarioEvento } from '@/composables/useCalendarioEscolarEvents'
+import { syncLinkedTasksAfterEventMove } from '@/composables/useCalendarioEscolarTasks'
+import { reloadTasksApi } from '@/composables/useCalendarioEscolarTasksApi'
 
 const apiPorFecha = ref<Record<string, CalEvent[]>>({})
 
@@ -115,6 +117,7 @@ export function useCalendarioEscolarEventsApi() {
       allDay: input.allDay,
       eventType: input.eventType,
       recurrence: input.recurrence,
+      assigneeIds: input.assigneeIds,
     }
     const ev = await apiCreateEvent(payload)
     await loadAll()
@@ -146,15 +149,20 @@ export function useCalendarioEscolarEventsApi() {
     const from = findEventDate(apiPorFecha.value, eventId)
     if (!from || !isCalendarModifyAllowed(from, newDate, newStartTime)) return false
 
-    const snapshot = apiPorFecha.value
-    apiPorFecha.value = moveEventInMap(snapshot, eventId, newDate, newStartTime)
+    const eventSnapshot = apiPorFecha.value
+    apiPorFecha.value = moveEventInMap(eventSnapshot, eventId, newDate, newStartTime)
+    if (from !== newDate) {
+      syncLinkedTasksAfterEventMove(eventId, newDate)
+    }
 
     try {
       await apiMoveEvent(eventId, newDate, newStartTime)
       await loadAll()
+      await reloadTasksApi()
       return true
     } catch {
-      apiPorFecha.value = snapshot
+      apiPorFecha.value = eventSnapshot
+      await reloadTasksApi()
       return false
     }
   }
@@ -188,6 +196,7 @@ export function useCalendarioEscolarEventsApi() {
       endTime?: string
       allDay?: boolean
       eventType?: string
+      assigneeIds?: string[]
     },
   ): Promise<boolean> {
     const date = findEventDate(apiPorFecha.value, eventId)

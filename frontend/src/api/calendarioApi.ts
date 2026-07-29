@@ -1,5 +1,5 @@
 import { apiFetch, withInstitutionBody } from '@/api/http'
-import type { CalEvent } from '@/data/calendarioEscolarDemo'
+import type { CalEvent } from '@/data/calendarioEscolarTypes'
 import type { CalTask } from '@/data/calendarioEscolarTypes'
 import type { CalRecurrencePreset } from '@/utils/calendarioRecurrence'
 
@@ -33,6 +33,7 @@ export interface CreateEventPayload {
   allDay?: boolean
   eventType?: string
   recurrence?: CalRecurrencePreset
+  assigneeIds?: string[]
 }
 
 export async function apiCreateEvent(payload: CreateEventPayload): Promise<CalEvent> {
@@ -48,6 +49,7 @@ export async function apiCreateEvent(payload: CreateEventPayload): Promise<CalEv
         all_day: payload.allDay ?? false,
         event_type: payload.eventType,
         recurrence: payload.recurrence ?? 'none',
+        assignee_ids: payload.assigneeIds ?? [],
       }),
     ),
   })
@@ -75,6 +77,7 @@ export interface PatchEventPayload {
   endTime?: string
   allDay?: boolean
   eventType?: string
+  assigneeIds?: string[]
 }
 
 export async function apiPatchEvent(id: string, patch: PatchEventPayload): Promise<CalEvent> {
@@ -88,6 +91,7 @@ export async function apiPatchEvent(id: string, patch: PatchEventPayload): Promi
       end_time: patch.endTime,
       all_day: patch.allDay,
       event_type: patch.eventType,
+      assignee_ids: patch.assigneeIds,
     }),
   })
 }
@@ -108,6 +112,7 @@ export interface CreateTaskPayload {
   allDay?: boolean
   completed?: boolean
   recurrence?: CalRecurrencePreset
+  assigneeIds?: string[]
 }
 
 export async function apiCreateTask(payload: CreateTaskPayload): Promise<CalTask> {
@@ -126,6 +131,7 @@ export async function apiCreateTask(payload: CreateTaskPayload): Promise<CalTask
         all_day: payload.allDay ?? false,
         completed: payload.completed ?? false,
         recurrence: payload.recurrence ?? 'none',
+        assignee_ids: payload.assigneeIds ?? [],
       }),
     ),
   })
@@ -156,6 +162,7 @@ export interface PatchTaskPayload {
   end_time?: string | null
   all_day?: boolean
   event_id?: string | null
+  assignee_ids?: string[] | null
 }
 
 export async function apiPatchTask(id: string, patch: PatchTaskPayload): Promise<CalTask> {

@@ -12,11 +12,13 @@ import {
   CheckIcon,
   ClockIcon,
   PencilIcon,
+  PlusIcon,
   TagIcon,
   TrashIcon,
+  UserGroupIcon,
   XMarkIcon,
 } from '@heroicons/vue/20/solid'
-import type { CalEvent } from '@/data/calendarioEscolarDemo'
+import type { CalEvent } from '@/data/calendarioEscolarTypes'
 import type { CalTask } from '@/data/calendarioEscolarTypes'
 import { useCalendarioEscolarEvents } from '@/composables/useCalendarioEscolarEvents'
 import { useCalendarioEscolarTasks } from '@/composables/useCalendarioEscolarTasks'
@@ -31,6 +33,7 @@ import {
 import { taskDisplayTitle } from '@/utils/calendarioTaskStyles'
 import { isCalendarModifyAllowed } from '@/utils/calendarioDates'
 import { gcalPrimaryBtn } from '@/utils/calendarioGoogleTheme'
+import CalendarioAssigneeChip from '@/components/calendario/CalendarioAssigneeChip.vue'
 import CalendarioTareaDetalleDialog from '@/components/calendario/CalendarioTareaDetalleDialog.vue'
 import CalendarioEventoDetalleDialog from '@/components/calendario/CalendarioEventoDetalleDialog.vue'
 
@@ -61,6 +64,7 @@ const deleteError = ref('')
 
 const taskEditOpen = ref(false)
 const taskEditId = ref<string | null>(null)
+const taskCreateEventId = ref<string | null>(null)
 const eventEditOpen = ref(false)
 const eventEditId = ref<string | null>(null)
 
@@ -177,6 +181,7 @@ function close() {
 
 function startEdit() {
   if (!detalle.value || !canModify.value) return
+  taskCreateEventId.value = null
   if (detalle.value.type === 'task') {
     taskEditId.value = detalle.value.task.id
     taskEditOpen.value = true
@@ -185,6 +190,20 @@ function startEdit() {
     eventEditOpen.value = true
   }
   open.value = false
+}
+
+function openCreateTaskForEvent() {
+  if (!eventDetail.value || !canModify.value) return
+  taskEditId.value = null
+  taskCreateEventId.value = eventDetail.value.id
+  taskEditOpen.value = true
+}
+
+function onTaskDialogSaved() {
+  emit('changed')
+  if (taskCreateEventId.value) {
+    eventTab.value = 'tareas'
+  }
 }
 
 function onEditSaved() {
@@ -393,14 +412,38 @@ async function toggleTaskDone(task: CalTask) {
                         </dd>
                       </div>
                     </div>
+                    <div v-if="eventDetail.assignees?.length" class="flex items-start gap-3">
+                      <UserGroupIcon class="mt-0.5 size-5 shrink-0 text-gray-400" aria-hidden="true" />
+                      <div class="min-w-0">
+                        <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Asignados</dt>
+                        <dd class="mt-1.5 flex flex-wrap gap-1.5">
+                          <CalendarioAssigneeChip
+                            v-for="person in eventDetail.assignees"
+                            :key="person.id"
+                            :person="person"
+                          />
+                        </dd>
+                      </div>
+                    </div>
                   </dl>
                 </template>
 
                 <!-- Evento: pestaña Tareas -->
                 <template v-else-if="eventDetail && eventTab === 'tareas'">
-                  <h3 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
-                    Tareas asociadas a este evento
-                  </h3>
+                  <div class="mb-3 flex items-center justify-between gap-3">
+                    <h3 class="text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+                      Tareas asociadas a este evento
+                    </h3>
+                    <button
+                      v-if="canModify"
+                      type="button"
+                      class="inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-500/10"
+                      @click="openCreateTaskForEvent"
+                    >
+                      <PlusIcon class="size-4" aria-hidden="true" />
+                      Nueva tarea
+                    </button>
+                  </div>
                   <ul v-if="eventLinkedTasks.length > 0" class="space-y-3">
                     <li
                       v-for="task in eventLinkedTasks"
@@ -453,6 +496,15 @@ async function toggleTaskDone(task: CalTask) {
                   </ul>
                   <p v-else class="text-sm text-gray-500 dark:text-gray-400">
                     No hay tareas vinculadas a este evento.
+                    <button
+                      v-if="canModify"
+                      type="button"
+                      class="mt-2 flex items-center gap-1.5 font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+                      @click="openCreateTaskForEvent"
+                    >
+                      <PlusIcon class="size-4" aria-hidden="true" />
+                      Crear primera tarea
+                    </button>
                   </p>
                 </template>
 
@@ -541,6 +593,19 @@ async function toggleTaskDone(task: CalTask) {
                         </dd>
                       </div>
                     </div>
+                    <div v-if="taskDetail.assignees?.length" class="flex items-start gap-3">
+                      <UserGroupIcon class="mt-0.5 size-5 shrink-0 text-gray-400" aria-hidden="true" />
+                      <div>
+                        <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Asignados</dt>
+                        <dd class="mt-1.5 flex flex-wrap gap-1.5">
+                          <CalendarioAssigneeChip
+                            v-for="person in taskDetail.assignees"
+                            :key="person.id"
+                            :person="person"
+                          />
+                        </dd>
+                      </div>
+                    </div>
                   </dl>
                 </template>
               </div>
@@ -597,7 +662,8 @@ async function toggleTaskDone(task: CalTask) {
   <CalendarioTareaDetalleDialog
     v-model:open="taskEditOpen"
     v-model:task-id="taskEditId"
-    @saved="onEditSaved"
+    v-model:preset-event-id="taskCreateEventId"
+    @saved="onTaskDialogSaved"
     @deleted="onEditDeleted"
   />
   <CalendarioEventoDetalleDialog

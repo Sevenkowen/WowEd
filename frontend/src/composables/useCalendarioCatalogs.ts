@@ -118,12 +118,8 @@ export function resolveEventTypeColor(eventType?: string): string {
 }
 
 export function useCalendarioCatalogs() {
-  if (useApi()) {
-    seedDefaultCatalogs()
-    void loadCatalogsFromApi()
-  } else {
-    ensureLocalCatalogs()
-  }
+  seedDefaultCatalogs()
+  void loadCatalogsFromApi()
 
   const eventTypeOptions = computed(() =>
     eventCatalog.value.length > 0 ? eventCatalog.value : DEFAULT_EVENT_CATALOG,

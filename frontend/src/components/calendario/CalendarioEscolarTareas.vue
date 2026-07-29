@@ -15,6 +15,11 @@ import {
 import type { CalendarioContentMode, CalendarioDisplayView } from '@/utils/calendarioDates'
 import { addDays, formatYmd, parseYmd } from '@/utils/calendarioDates'
 import {
+  calPastClass,
+  isCalendarTaskElapsed,
+} from '@/utils/calendarioPastVisual'
+import { useCalendarClock } from '@/composables/useCalendarClock'
+import {
   gcalPrimaryBtn,
   gcalShell,
   gcalSubtleSurface,
@@ -45,6 +50,7 @@ let suppressCardClickUntil = 0
 
 const { todasLasTareas, toggleCompletada, setCompletada, moveTaskCuadrante } = useCalendarioEscolarTasks()
 const { porFecha: eventosPorFecha } = useCalendarioEscolarEvents()
+const now = useCalendarClock()
 
 interface BoardColumn {
   id: string
@@ -340,7 +346,10 @@ function openTaskDetail(task: CalTask, e?: Event): void {
               <template #item="{ element: task }">
                 <article
                   class="tarea-board-card group cursor-grab rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-shadow active:cursor-grabbing hover:shadow-md dark:border-white/10 dark:bg-gray-800 dark:hover:border-white/20"
-                  :class="task.completed ? 'opacity-80' : ''"
+                  :class="[
+                    task.completed ? 'opacity-80' : '',
+                    calPastClass(isCalendarTaskElapsed(task, now), true),
+                  ]"
                   @click="openTaskDetail(task)"
                 >
                   <div class="mb-2 flex gap-1">

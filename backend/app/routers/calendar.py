@@ -23,6 +23,15 @@ from app.schemas.calendar import (
     ResizeTaskBody,
     TasksByDateResponse,
 )
+from app.services.calendar_assignees import (
+    existing_event_assignee_ids,
+    existing_task_assignee_ids,
+    load_event_assignees_map,
+    load_task_assignees_map,
+    sync_event_assignees,
+    sync_task_assignees,
+    validate_assignee_ids,
+)
 from app.services.institution_seed import ensure_institution_exists
 from app.services.mappers import combine_date_time, event_to_dto, parse_hhmm, task_to_dto
 from app.services.recurrence import recurrence_from_preset
@@ -30,6 +39,13 @@ from app.services.recurrence import recurrence_from_preset
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
 PAST_DATE_DETAIL = "No se pueden crear eventos o tareas en fechas anteriores a hoy."
+
+
+def _sync_linked_tasks_to_event_date(db: Session, event_id: uuid.UUID, new_date) -> None:
+    """Las tareas vinculadas siguen al evento cuando cambia de día."""
+    linked = db.scalars(select(Task).where(Task.linked_event_id == event_id)).all()
+    for task in linked:
+        task.due_date = new_date
 
 
 def _reject_past_date(date_str: str) -> None:
@@ -75,6 +91,7 @@ def list_events(
     if inst:
         q = q.where(CalendarEvent.institution_id == inst)
     events = db.scalars(q).all()
+    assignees_map = load_event_assignees_map(db, events)
 
     por_fecha: dict[str, list[dict]] = {}
     for ev in events:
@@ -85,7 +102,9 @@ def list_events(
             continue
         if to_date and ymd > to_date:
             continue
-        por_fecha.setdefault(ymd, []).append(event_to_dto(ev))
+        por_fecha.setdefault(ymd, []).append(
+            event_to_dto(ev, assignees_map.get(str(ev.id), []))
+        )
 
     for ymd in por_fecha:
         por_fecha[ymd].sort(key=lambda e: e["datetime"])
@@ -131,9 +150,12 @@ def create_event(body: CreateEventBody, db: Session = Depends(get_db)):
         recurrence_id=recurrence_id,
     )
     db.add(ev)
+    db.flush()
+    assignee_uuids = validate_assignee_ids(db, inst, body.assignee_ids)
+    assignees = sync_event_assignees(db, ev.id, assignee_uuids, ev.institution_id)
     db.commit()
     db.refresh(ev)
-    return event_to_dto(ev)
+    return event_to_dto(ev, assignees)
 
 
 @router.patch("/events/{event_id}/move", response_model=CalEventDto)
@@ -149,9 +171,11 @@ def move_event(event_id: str, body: MoveEventBody, db: Session = Depends(get_db)
     start = combine_date_time(body.date, body.start_time)
     ev.start_time = start
     ev.end_time = start + duration
+    _sync_linked_tasks_to_event_date(db, ev.id, start.date())
     db.commit()
     db.refresh(ev)
-    return event_to_dto(ev)
+    assignees_map = load_event_assignees_map(db, [ev])
+    return event_to_dto(ev, assignees_map.get(str(ev.id), []))
 
 
 @router.patch("/events/{event_id}/resize", response_model=CalEventDto)
@@ -166,7 +190,8 @@ def resize_event(event_id: str, body: ResizeEventBody, db: Session = Depends(get
     ev.end_time = end
     db.commit()
     db.refresh(ev)
-    return event_to_dto(ev)
+    assignees_map = load_event_assignees_map(db, [ev])
+    return event_to_dto(ev, assignees_map.get(str(ev.id), []))
 
 
 @router.patch("/events/{event_id}", response_model=CalEventDto)
@@ -222,9 +247,25 @@ def patch_event(event_id: str, body: PatchEventBody, db: Session = Depends(get_d
         ev.start_time = start
         ev.end_time = end
 
+    assignees = None
+    if body.assignee_ids is not None:
+        assignee_uuids = validate_assignee_ids(
+            db,
+            ev.institution_id,
+            body.assignee_ids,
+            allow_existing=existing_event_assignee_ids(db, ev.id),
+        )
+        assignees = sync_event_assignees(db, ev.id, assignee_uuids, ev.institution_id)
+
+    if ev.start_time:
+        _sync_linked_tasks_to_event_date(db, ev.id, ev.start_time.date())
+
     db.commit()
     db.refresh(ev)
-    return event_to_dto(ev)
+    if assignees is not None:
+        return event_to_dto(ev, assignees)
+    assignees_map = load_event_assignees_map(db, [ev])
+    return event_to_dto(ev, assignees_map.get(str(ev.id), []))
 
 
 @router.delete("/events/{event_id}", status_code=204)
@@ -248,12 +289,16 @@ def list_tasks(
     db: Session = Depends(get_db),
 ):
     try:
-        tasks = db.scalars(select(Task)).all()
+        tasks = db.scalars(
+            select(Task).order_by(Task.due_date, Task.start_time.asc().nulls_first(), Task.title, Task.id)
+        ).all()
     except Exception as exc:
         raise HTTPException(
             503,
             "Falta migración de tasks. Ejecutá backend/migrations/001_task_calendar_fields.sql",
         ) from exc
+
+    assignees_map = load_task_assignees_map(db, tasks)
 
     por_fecha: dict[str, list[dict]] = {}
     for task in tasks:
@@ -264,7 +309,9 @@ def list_tasks(
             continue
         if to_date and ymd > to_date:
             continue
-        por_fecha.setdefault(ymd, []).append(task_to_dto(task))
+        por_fecha.setdefault(ymd, []).append(
+            task_to_dto(task, assignees_map.get(str(task.id), []))
+        )
 
     return {"por_fecha": por_fecha}
 
@@ -308,9 +355,12 @@ def create_task(body: CreateTaskBody, db: Session = Depends(get_db)):
         institution_id=_default_institution(body.institution_id),
     )
     db.add(task)
+    db.flush()
+    assignee_uuids = validate_assignee_ids(db, inst, body.assignee_ids)
+    assignees = sync_task_assignees(db, task.id, assignee_uuids, task.institution_id)
     db.commit()
     db.refresh(task)
-    return task_to_dto(task)
+    return task_to_dto(task, assignees)
 
 
 @router.patch("/tasks/{task_id}/move", response_model=CalTaskDto)
@@ -336,7 +386,8 @@ def move_task(task_id: str, body: MoveTaskBody, db: Session = Depends(get_db)):
         task.end_time = end_dt.time()
     db.commit()
     db.refresh(task)
-    return task_to_dto(task)
+    assignees_map = load_task_assignees_map(db, [task])
+    return task_to_dto(task, assignees_map.get(str(task.id), []))
 
 
 @router.patch("/tasks/{task_id}", response_model=CalTaskDto)
@@ -384,9 +435,23 @@ def patch_task(task_id: str, body: PatchTaskBody, db: Session = Depends(get_db))
             ).time()
     if body.event_id is not None:
         task.linked_event_id = uuid.UUID(body.event_id) if body.event_id else None
+
+    assignees = None
+    if body.assignee_ids is not None:
+        assignee_uuids = validate_assignee_ids(
+            db,
+            task.institution_id,
+            body.assignee_ids,
+            allow_existing=existing_task_assignee_ids(db, task.id),
+        )
+        assignees = sync_task_assignees(db, task.id, assignee_uuids, task.institution_id)
+
     db.commit()
     db.refresh(task)
-    return task_to_dto(task)
+    if assignees is not None:
+        return task_to_dto(task, assignees)
+    assignees_map = load_task_assignees_map(db, [task])
+    return task_to_dto(task, assignees_map.get(str(task.id), []))
 
 
 @router.delete("/tasks/{task_id}", status_code=204)
@@ -411,4 +476,5 @@ def resize_task(task_id: str, body: ResizeTaskBody, db: Session = Depends(get_db
     task.end_time = end_t
     db.commit()
     db.refresh(task)
-    return task_to_dto(task)
+    assignees_map = load_task_assignees_map(db, [task])
+    return task_to_dto(task, assignees_map.get(str(task.id), []))
